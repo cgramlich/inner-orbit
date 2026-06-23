@@ -48,6 +48,9 @@ APP_ENV = os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+# Only needed if the project signs JWTs with the legacy HS256 shared secret.
+# Newer projects use asymmetric keys (ES256/RS256) verified via JWKS — no secret needed.
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # Owner/debug (optional)
@@ -67,7 +70,8 @@ ALLOWED_ORIGINS = [
         "ALLOWED_ORIGINS",
         "https://getinnerorbit.io,https://www.getinnerorbit.io,https://app.getinnerorbit.io,"
         "capacitor://localhost,https://localhost,http://localhost,"
-        "http://localhost:8000,http://127.0.0.1:8000",
+        "http://localhost:8000,http://127.0.0.1:8000,"
+        "http://localhost:8300,http://127.0.0.1:8300,http://localhost:8302,http://127.0.0.1:8302",
     ).split(",")
     if o.strip()
 ]
@@ -176,15 +180,20 @@ def ai_exc(where: str, exc: Exception) -> HTTPException:
 # Auth — verify Supabase access token (ES256, JWKS) and return the user id.
 # --------------------------------------------------------------------------- #
 def verify_jwt(token: str) -> str:
+    """Verify a Supabase access token and return its user id (the 'sub' claim).
+    Handles both asymmetric signing keys (ES256/RS256 via JWKS — the default for
+    new projects) and the legacy HS256 shared secret (SUPABASE_JWT_SECRET)."""
     try:
-        signing_key = _jwks_client.get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["ES256"],
-            audience="authenticated",
-            leeway=10,
-        )
+        alg = jwt.get_unverified_header(token).get("alg", "")
+        if alg.startswith(("ES", "RS")):
+            key = _jwks_client.get_signing_key_from_jwt(token).key
+            claims = jwt.decode(token, key, algorithms=[alg], audience="authenticated", leeway=10)
+        elif alg == "HS256":
+            if not SUPABASE_JWT_SECRET:
+                raise RuntimeError("HS256 token but SUPABASE_JWT_SECRET is not set")
+            claims = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=["HS256"], audience="authenticated", leeway=10)
+        else:
+            raise RuntimeError(f"Unsupported JWT alg '{alg}'")
     except Exception as exc:
         logger.warning(f"[AUTH] JWT verify failed: {type(exc).__name__}: {exc}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
