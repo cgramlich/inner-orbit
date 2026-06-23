@@ -34,6 +34,13 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 from anthropic import Anthropic
 
+# Load backend/.env for local development (no-op in prod where env is set directly).
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 # --------------------------------------------------------------------------- #
 # Logging
 # --------------------------------------------------------------------------- #
