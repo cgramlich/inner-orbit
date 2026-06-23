@@ -1,0 +1,17 @@
+# secrets / env
+.env
+*.env
+!*.env.example
+backend/.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node / capacitor
+node_modules/
+www/            # generated native bundle (build.js output)
+.DS_Store
+Thumbs.db
