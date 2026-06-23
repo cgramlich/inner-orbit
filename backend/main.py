@@ -76,6 +76,7 @@ ALLOWED_ORIGINS = [
     for o in os.getenv(
         "ALLOWED_ORIGINS",
         "https://getinnerorbit.io,https://www.getinnerorbit.io,https://app.getinnerorbit.io,"
+        "https://cgramlich.github.io,"
         "capacitor://localhost,https://localhost,http://localhost,"
         "http://localhost:8000,http://127.0.0.1:8000,"
         "http://localhost:8300,http://127.0.0.1:8300,http://localhost:8302,http://127.0.0.1:8302",
