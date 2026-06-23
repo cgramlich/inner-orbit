@@ -50,8 +50,9 @@ Never hardcode brand text/colors. Route through `APP_NAME`/`BRAND` config + an
 - [x] **Phase 3:** Interactions log (timeline + types) + follow-up tasks +
       cadence engine + Home "who to reach out to" / follow-ups / upcoming birthdays
 - [x] Explore-offline mode (local-only, no backend) for trying it before Supabase is wired
-- [ ] **Phase 4 (next):** AI — summarize history / draft message / reconnect opener
-- [ ] Phase 5: Deals layer (gated pipeline)
+- [x] **Phase 5:** Deals layer (gated) — pipeline by stage, open/won totals,
+      deal form + detail with quick stage changes, contact/company linking
+- [ ] **Phase 4:** AI — summarize history / draft message (needs live backend to run)
 
 ## Try it now (no backend needed)
 Run `python dev_server.py` in this folder, open http://localhost:8300 (or 8302),

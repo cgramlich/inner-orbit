@@ -260,6 +260,11 @@ function daysUntilBirthday(bday){
 const ITYPES = [["note","Note"],["call","Call"],["text","Text"],["email","Email"],["meet","In person"]];
 function ITypeLabel(t){ const f=ITYPES.find(x=>x[0]===t); return f ? f[1] : "Note"; }
 
+/* Deal pipeline stages (optional deals layer) */
+const STAGES = [["lead","Lead"],["contacted","Contacted"],["proposal","Proposal"],["won","Won"],["lost","Lost"]];
+function stageLabel(s){ const f=STAGES.find(x=>x[0]===s); return f ? f[1] : "Lead"; }
+function fmtMoney(n){ const v=Number(n); if(!v) return ""; return "$"+v.toLocaleString(undefined,{ maximumFractionDigits:0 }); }
+
 /* ---- config + cache (localStorage) ----------------------------------- */
 function loadConfig(){
   try { return JSON.parse(localStorage.getItem(CFG_KEY)||"{}") || {}; } catch(e){ return {}; }
@@ -659,8 +664,121 @@ function PeopleView({ data, onOpenContact, onOpenOrg }){
   );
 }
 
-function DealsView(){
-  return <Placeholder glyph={"\u{1F4BC}"} title="Deals are off" note="Enable the deals layer in Settings to track opportunities." />;
+function DealsView({ data, onOpenDeal }){
+  const deals = data.deals || [];
+  const contacts = data.contacts || [];
+  const orgs = data.organizations || [];
+  const nameFor = (d)=>{
+    const c = contacts.find(x=> x.id===d.contact_id); if(c) return c.name;
+    const o = orgs.find(x=> x.id===d.org_id); if(o) return o.name; return "";
+  };
+  if (deals.length===0)
+    return <Placeholder glyph={"\u{1F4BC}"} title="No deals yet" note="Tap + → New deal to start tracking an opportunity." />;
+
+  const openValue = deals.filter(d=> d.stage!=="won" && d.stage!=="lost").reduce((s,d)=> s+(Number(d.value)||0), 0);
+  const wonValue  = deals.filter(d=> d.stage==="won").reduce((s,d)=> s+(Number(d.value)||0), 0);
+
+  return (
+    <div>
+      <div className="row" style={{gap:10, marginBottom:12}}>
+        <div className="card" style={{flex:1, marginBottom:0}}>
+          <div className="muted">Open pipeline</div>
+          <div style={{fontWeight:700, fontSize:18}}>{fmtMoney(openValue) || "—"}</div></div>
+        <div className="card" style={{flex:1, marginBottom:0}}>
+          <div className="muted">Won</div>
+          <div style={{fontWeight:700, fontSize:18}}>{fmtMoney(wonValue) || "—"}</div></div>
+      </div>
+      {STAGES.map(([sv,sl])=>{
+        const inStage = deals.filter(d=> (d.stage||"lead")===sv);
+        if (inStage.length===0) return null;
+        return (
+          <div key={sv} className="card">
+            <div className="sec-title">{sl} ({inStage.length})</div>
+            {inStage.map(d=> (
+              <div key={d.id} className="list-row" onClick={()=> onOpenDeal(d.id)}>
+                <div className="lr-main"><div className="lr-name">{d.title}</div>
+                  <div className="muted">{nameFor(d)}</div></div>
+                {d.value ? <div style={{fontWeight:600}}>{fmtMoney(d.value)}</div> : null}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DealForm({ deal, contacts, orgs, onSave, onClose }){
+  const d = deal || {};
+  const [title,setTitle] = useState(d.title||"");
+  const [value,setValue] = useState(d.value!=null ? String(d.value) : "");
+  const [stage,setStage] = useState(d.stage||"lead");
+  const [contactName,setContactName] = useState((contacts.find(c=>c.id===d.contact_id)||{}).name||"");
+  const [orgName,setOrgName] = useState((orgs.find(o=>o.id===d.org_id)||{}).name||"");
+  const [close,setClose] = useState(d.expected_close||"");
+  const [notes,setNotes] = useState(d.notes||"");
+  return (
+    <div className="overlay">
+      <div className="overlay-head">
+        <button className="icon-btn" onClick={onClose}>←</button>
+        <b>{deal?"Edit deal":"New deal"}</b>
+        <button className="btn ghost" disabled={!title.trim()}
+          onClick={()=> onSave({ title:title.trim(), value:Number(value)||null, stage,
+            contactName, orgName, expected_close:close, notes:notes.trim() })}>Save</button>
+      </div>
+      <div className="overlay-body">
+        <div className="field"><label>Title</label>
+          <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Website project" autoFocus /></div>
+        <div className="field"><label>Value</label>
+          <input className="input" type="number" inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} placeholder="0" /></div>
+        <div className="field"><label>Stage</label>
+          <select className="input" value={stage} onChange={e=>setStage(e.target.value)}>
+            {STAGES.map(([v,l])=> <option key={v} value={v}>{l}</option>)}
+          </select></div>
+        <div className="field"><label>Contact</label>
+          <input className="input" list="deal-contacts" value={contactName} onChange={e=>setContactName(e.target.value)} placeholder="Link an existing contact" />
+          <datalist id="deal-contacts">{contacts.map(c=> <option key={c.id} value={c.name} />)}</datalist></div>
+        <div className="field"><label>Company</label>
+          <input className="input" list="deal-orgs" value={orgName} onChange={e=>setOrgName(e.target.value)} placeholder="Link / create a company" />
+          <datalist id="deal-orgs">{orgs.map(o=> <option key={o.id} value={o.name} />)}</datalist></div>
+        <div className="field"><label>Expected close</label>
+          <input className="input" type="date" value={close} onChange={e=>setClose(e.target.value)} /></div>
+        <div className="field"><label>Notes</label>
+          <textarea className="input" rows="3" value={notes} onChange={e=>setNotes(e.target.value)} /></div>
+      </div>
+    </div>
+  );
+}
+
+function DealDetail({ deal, contact, org, onEdit, onDelete, onClose, onStage, onOpenContact, onOpenOrg }){
+  const d = deal;
+  return (
+    <div className="overlay">
+      <div className="overlay-head">
+        <button className="icon-btn" onClick={onClose}>←</button>
+        <b>Deal</b>
+        <button className="btn ghost" onClick={onEdit}>Edit</button>
+      </div>
+      <div className="overlay-body">
+        <h2 style={{marginBottom:6}}>{d.title}</h2>
+        {d.value ? <div className="duecard ok" style={{fontSize:18}}>{fmtMoney(d.value)}</div> : null}
+        <div className="dlabel" style={{marginTop:6}}>Stage</div>
+        <div className="chips filterchips" style={{marginBottom:10}}>
+          {STAGES.map(([sv,sl])=> <span key={sv} className={"pill"+(((d.stage||"lead")===sv)?" on":"")} onClick={()=> onStage(sv)}>{sl}</span>)}
+        </div>
+        {contact && <div className="list-row" onClick={()=> onOpenContact(contact.id)}>
+          <div className="avatar">{initials(contact.name)}</div>
+          <div className="lr-main"><div className="lr-name">{contact.name}</div><div className="muted">Contact</div></div></div>}
+        {org && <div className="list-row" onClick={()=> onOpenOrg(org.id)}>
+          <div className="avatar sq">{initials(org.name)}</div>
+          <div className="lr-main"><div className="lr-name">{org.name}</div><div className="muted">Company</div></div></div>}
+        {d.expected_close && <DRow label="Expected close" val={fmtDate(d.expected_close)} />}
+        {d.notes && <DRow label="Notes" val={d.notes} />}
+        <button className="btn danger" style={{marginTop:10}}
+          onClick={()=>{ if(confirm("Delete this deal?")) onDelete(); }}>Delete deal</button>
+      </div>
+    </div>
+  );
 }
 
 function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updateVer }){
@@ -989,13 +1107,14 @@ function OrgDetail({ org, contacts, onEdit, onDelete, onClose, onOpenContact }){
   );
 }
 
-function AddSheet({ onClose, onContact, onCompany }){
+function AddSheet({ onClose, onContact, onCompany, onDeal, dealsEnabled }){
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={e=> e.stopPropagation()}>
-        <div style={{textAlign:"center", fontWeight:600, marginBottom:10}}>Add to Orbit</div>
+        <div style={{textAlign:"center", fontWeight:600, marginBottom:10}}>Add to {BRAND.name}</div>
         <button className="btn primary" onClick={onContact}>New contact</button>
         <button className="btn" style={{marginTop:8}} onClick={onCompany}>New company</button>
+        {dealsEnabled && <button className="btn" style={{marginTop:8}} onClick={onDeal}>New deal</button>}
         <button className="btn ghost" style={{marginTop:6}} onClick={onClose}>Cancel</button>
       </div>
     </div>
@@ -1084,6 +1203,25 @@ function App(){
   function toggleTask(id){ saveCollection("tasks", (data.tasks||[]).map(t=> t.id===id ? {...t, done:!t.done} : t)); }
   function deleteTask(id){ saveCollection("tasks", (data.tasks||[]).filter(t=> t.id!==id)); }
 
+  // Deals (optional layer).
+  function upsertDeal(d){
+    const arr=data.deals||[]; const i=arr.findIndex(x=>x.id===d.id);
+    saveCollection("deals", i>=0 ? arr.map(x=> x.id===d.id?d:x) : [d, ...arr]);
+  }
+  function deleteDeal(id){ saveCollection("deals", (data.deals||[]).filter(x=> x.id!==id)); }
+  function setDealStage(id, stage){ saveCollection("deals", (data.deals||[]).map(x=> x.id===id ? {...x, stage, updated_at:todayISO()} : x)); }
+  function onSaveDeal(form){
+    const base = (overlay && overlay.deal) || {};
+    const contact = (data.contacts||[]).find(c=> (c.name||"").toLowerCase()===(form.contactName||"").trim().toLowerCase());
+    const org_id = form.orgName ? ensureOrg(form.orgName) : null;
+    const d = { id: base.id || uid("d"), title:form.title, value:form.value, stage:form.stage,
+      contact_id: contact ? contact.id : null, org_id,
+      expected_close: form.expected_close || null, notes:form.notes,
+      created_at: base.created_at || todayISO(), updated_at: todayISO() };
+    upsertDeal(d);
+    setOverlay({ type:"dealDetail", id:d.id });
+  }
+
   // Service worker registration + version check.
   useEffect(()=>{
     if (!("serviceWorker" in navigator)) return;
@@ -1131,7 +1269,7 @@ function App(){
   else if (tab==="people") screen = <PeopleView data={data}
                     onOpenContact={(id)=> setOverlay({type:"contactDetail", id})}
                     onOpenOrg={(id)=> setOverlay({type:"orgDetail", id})} />;
-  else if (tab==="deals") screen = <DealsView />;
+  else if (tab==="deals") screen = <DealsView data={data} onOpenDeal={(id)=> setOverlay({type:"dealDetail", id})} />;
   else screen = <SettingsView cfg={cfg} onCfg={applyCfg} onLogout={signOutHard}
                     onCheckUpdate={checkUpdate} updateVer={updateVer} />;
 
@@ -1146,9 +1284,10 @@ function App(){
       {toast && <div className="toast">{toast}</div>}
 
       {overlay && overlay.type==="add" &&
-        <AddSheet onClose={()=> setOverlay(null)}
+        <AddSheet onClose={()=> setOverlay(null)} dealsEnabled={showDeals}
           onContact={()=> setOverlay({type:"contactForm"})}
-          onCompany={()=> setOverlay({type:"orgForm"})} />}
+          onCompany={()=> setOverlay({type:"orgForm"})}
+          onDeal={()=> setOverlay({type:"dealForm"})} />}
 
       {overlay && overlay.type==="contactForm" &&
         <ContactForm contact={overlay.contact} orgs={data.organizations||[]}
@@ -1177,6 +1316,25 @@ function App(){
         return <InteractionForm contactName={c && c.name} interaction={overlay.interaction}
           onSave={(form)=>{ saveInteraction(overlay.contactId, overlay.interaction, form); setOverlay({type:"contactDetail", id:overlay.contactId}); }}
           onClose={()=> setOverlay({type:"contactDetail", id:overlay.contactId})} />;
+      })()}
+
+      {overlay && overlay.type==="dealForm" &&
+        <DealForm deal={overlay.deal} contacts={data.contacts||[]} orgs={data.organizations||[]}
+          onSave={onSaveDeal}
+          onClose={()=> setOverlay(overlay.deal ? {type:"dealDetail", id:overlay.deal.id} : null)} />}
+
+      {overlay && overlay.type==="dealDetail" && (()=>{
+        const d=(data.deals||[]).find(x=> x.id===overlay.id);
+        if(!d){ return null; }
+        const contact=(data.contacts||[]).find(c=> c.id===d.contact_id);
+        const org=(data.organizations||[]).find(o=> o.id===d.org_id);
+        return <DealDetail deal={d} contact={contact} org={org}
+          onEdit={()=> setOverlay({type:"dealForm", deal:d})}
+          onDelete={()=>{ deleteDeal(d.id); setOverlay(null); }}
+          onStage={(s)=> setDealStage(d.id, s)}
+          onOpenContact={(id)=> setOverlay({type:"contactDetail", id})}
+          onOpenOrg={(id)=> setOverlay({type:"orgDetail", id})}
+          onClose={()=> setOverlay(null)} />;
       })()}
 
       {overlay && overlay.type==="orgForm" &&
