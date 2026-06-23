@@ -46,9 +46,17 @@ Never hardcode brand text/colors. Route through `APP_NAME`/`BRAND` config + an
       (compiles + renders clean; placeholder CRM screens)
 - [x] **Phase 2:** Contacts + Organizations + Tags — list/search/filter, add/edit/delete,
       contact↔company linking, contact & company detail views
-- [ ] **Phase 3 (next):** Interactions log + follow-up engine + Home "who to reach out to"
-- [ ] Phase 4: AI (summarize / draft message / reconnect opener)
+- [x] **Phase 3:** Interactions log (timeline + types) + follow-up tasks +
+      cadence engine + Home "who to reach out to" / follow-ups / upcoming birthdays
+- [x] Explore-offline mode (local-only, no backend) for trying it before Supabase is wired
+- [ ] **Phase 4 (next):** AI — summarize history / draft message / reconnect opener
 - [ ] Phase 5: Deals layer (gated pipeline)
+
+## Try it now (no backend needed)
+Run `python dev_server.py` in this folder, open http://localhost:8300 (or 8302),
+tap **“Explore offline (no account)”**, and add contacts / log interactions / set
+cadences. Data stays local on the device. The Explore button auto-hides once
+`SUPABASE_URL` is set.
 - [ ] Supabase project created + `schema.sql` applied
 - [ ] Native build (vendor libs, icons) + store listing
 
