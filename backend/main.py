@@ -61,11 +61,11 @@ MAX_TOKENS_CEILING = int(os.getenv("AI_MAX_TOKENS_CEILING", "8192"))
 # CORS — web origins + Capacitor native origins.
 #   iOS default scheme   = capacitor://localhost
 #   Android default      = https://localhost
-# TODO: add the real Orbit web domain(s) once registered.
 ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv(
         "ALLOWED_ORIGINS",
+        "https://getinnerorbit.io,https://www.getinnerorbit.io,https://app.getinnerorbit.io,"
         "capacitor://localhost,https://localhost,http://localhost,"
         "http://localhost:8000,http://127.0.0.1:8000",
     ).split(",")

@@ -6,11 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Orbit" />
+  <meta name="apple-mobile-web-app-title" content="Inner Orbit" />
   <meta name="theme-color" content="#0e1116" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <title>Orbit</title>
+  <title>Inner Orbit</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -202,7 +202,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 /* ---- branding / config ---------------------------------------------- */
 const APP_VERSION = "0.1.0";
-const BRAND = { name: "Orbit", tagline: "Stay close to the people in your orbit." };
+const BRAND = { name: "Inner Orbit", tagline: "Stay close to the people in your orbit." };
 
 // Hosted backend base. Overridable per-user in Settings.
 // TODO: set to the deployed Railway URL once the Orbit backend is live.
@@ -468,7 +468,7 @@ function AuthScreen({ onSignedIn, onExplore }){
   return (
     <div className="auth-wrap">
       <div className="brand">
-        <div className="mark">Orbit</div>
+        <div className="mark">{BRAND.name}</div>
         <div className="tag">{BRAND.tagline}</div>
       </div>
       {!SUPABASE_URL && (

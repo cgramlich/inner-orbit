@@ -1,11 +1,12 @@
-# Orbit — Personal CRM
+# Inner Orbit — Personal CRM
 
 Stay close to the people in your orbit. A personal relationship manager (with an
 optional lightweight deals layer) in the **Forever Apps** portfolio, built on the
 MenuCaptain stack: single-file React-via-CDN + Babel PWA, FastAPI + Supabase
 backend, Capacitor native wrap, service-worker offline.
 
-- **appId (permanent):** `com.orbitcrm.app`
+- **Name:** Inner Orbit  ·  **Domain:** getinnerorbit.io
+- **appId:** `com.orbitcrm.app` (invisible to users; not yet published — can switch to `com.innerorbit.app` before first publish if desired)
 - **Publisher:** MilSpo Life LLC (future Forever Apps)
 - **Scope:** see `Dropbox\My AI\CG Apps\Personal CRM\Personal CRM Architecture & Design\SCOPE-crm.md`
 
