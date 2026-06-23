@@ -179,6 +179,13 @@
       border:1px solid var(--line); }
     .duecard.alert{ background:rgba(229,100,90,.12); border-color:var(--danger); color:var(--danger); }
     .duecard.ok{ background:var(--surface-2); color:var(--text-dim); }
+
+    /* ---- AI panel (Phase 4) ---- */
+    .ai-out{ white-space:pre-wrap; line-height:1.5; }
+    .ai-loading{ display:flex; align-items:center; gap:10px; color:var(--text-dim); padding:8px 0; }
+    .spinner{ width:16px; height:16px; border-radius:50%; border:2px solid var(--line);
+      border-top-color:var(--accent); display:inline-block; animation:spin .8s linear infinite; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
   </style>
 
   <script>
@@ -929,7 +936,8 @@ function ContactForm({ contact, orgs, onSave, onClose }){
 }
 
 function ContactDetail({ contact, org, interactions, tasks, onEdit, onDelete, onClose,
-                         onLogInteraction, onDeleteInteraction, onAddTask, onToggleTask, onDeleteTask }){
+                         onLogInteraction, onDeleteInteraction, onAddTask, onToggleTask, onDeleteTask,
+                         onSummarize, onDraft }){
   const c = contact;
   const [taskTitle,setTaskTitle] = useState("");
   const [taskDate,setTaskDate]   = useState("");
@@ -958,6 +966,11 @@ function ContactDetail({ contact, org, interactions, tasks, onEdit, onDelete, on
         {c.how_we_met && <DRow label="How we met" val={c.how_we_met} />}
         {c.birthday   && <DRow label="Birthday"   val={fmtDate(c.birthday)} />}
         {c.notes      && <DRow label="Notes"      val={c.notes} />}
+
+        <div className="row" style={{gap:10, marginTop:12}}>
+          <button className="btn" onClick={()=> onSummarize()}>✨ Summarize</button>
+          <button className="btn" onClick={()=> onDraft()}>✨ Draft check-in</button>
+        </div>
 
         <div className="card" style={{marginTop:12}}>
           <div className="row" style={{justifyContent:"space-between", marginBottom:8}}>
@@ -1121,6 +1134,36 @@ function AddSheet({ onClose, onContact, onCompany, onDeal, dealsEnabled }){
   );
 }
 
+/* Runs an async AI thunk and shows loading -> result with a Copy button. */
+function AIPanel({ title, run, onClose }){
+  const [state,setState] = useState("loading");   // loading | done | error
+  const [text,setText]   = useState("");
+  const [copied,setCopied] = useState(false);
+  useEffect(()=>{
+    let live=true;
+    (async ()=>{ try { const r=await run(); if(live){ setText(r||""); setState("done"); } }
+      catch(e){ if(live){ setText((e&&e.message)||"AI error"); setState("error"); } } })();
+    return ()=>{ live=false; };
+  },[]);  // eslint-disable-line
+  function copy(){ try { navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch(e){} }
+  return (
+    <div className="overlay">
+      <div className="overlay-head">
+        <button className="icon-btn" onClick={onClose}>←</button>
+        <b>{title}</b>
+        {state==="done"
+          ? <button className="btn ghost" onClick={copy}>{copied?"Copied":"Copy"}</button>
+          : <span style={{width:34}} />}
+      </div>
+      <div className="overlay-body">
+        {state==="loading" && <div className="ai-loading"><span className="spinner" /> Thinking…</div>}
+        {state==="error" && <div className="err">{text}</div>}
+        {state==="done" && <div className="ai-out">{text}</div>}
+      </div>
+    </div>
+  );
+}
+
 function App(){
   const [cfg,setCfg] = useState(()=> loadConfig());
   const [authed,setAuthed] = useState(()=>{ const c=loadConfig(); return configComplete(c) || !!c.offline; });
@@ -1222,6 +1265,26 @@ function App(){
     setOverlay({ type:"dealDetail", id:d.id });
   }
 
+  // AI (lightweight, via the backend relay). Needs a real signed-in session.
+  function aiReady(){ if(!configComplete(cfg)){ flash("AI works once you're signed in to the backend"); return false; } return true; }
+  function summarizeContact(c){
+    if(!aiReady()) return;
+    const ix = (data.interactions||[]).filter(x=> x.contact_id===c.id)
+      .slice().sort((a,b)=> (a.date||"").localeCompare(b.date||""));
+    const lines = ix.map(i=> i.date+" — "+ITypeLabel(i.type)+(i.note?(": "+i.note):"")).join("\n");
+    const sys = "You summarize a personal relationship history in 2-3 sentences, then suggest one natural next step. Warm and concise.";
+    const user = "Contact: "+c.name+(c.title?(", "+c.title):"")+"\nNotes: "+(c.notes||"-")+"\n\nInteractions:\n"+(lines||"(none logged yet)");
+    setOverlay({ type:"ai", title:"Summary — "+c.name,
+      run: ()=> aiRelay(cfg, { task:"summarize_contact", system:sys, messages:[{role:"user", content:user}], max_tokens:400 }) });
+  }
+  function draftMessage(c){
+    if(!aiReady()) return;
+    const sys = "You write a short, warm, natural check-in message to reconnect with someone. Output only the message — no preamble, no quotes.";
+    const ctx = "Recipient: "+c.name+"\nHow we met / context: "+(c.how_we_met||"-")+"\nNotes: "+(c.notes||"-")+"\nLast contacted: "+(c.last_interaction_at||"a while ago");
+    setOverlay({ type:"ai", title:"Draft for "+c.name,
+      run: ()=> aiRelay(cfg, { task:"draft_message", system:sys, messages:[{role:"user", content:ctx}], max_tokens:300 }) });
+  }
+
   // Service worker registration + version check.
   useEffect(()=>{
     if (!("serviceWorker" in navigator)) return;
@@ -1308,7 +1371,9 @@ function App(){
           onDeleteInteraction={deleteInteraction}
           onAddTask={(title,due)=> addTask(c.id, title, due)}
           onToggleTask={toggleTask}
-          onDeleteTask={deleteTask} />;
+          onDeleteTask={deleteTask}
+          onSummarize={()=> summarizeContact(c)}
+          onDraft={()=> draftMessage(c)} />;
       })()}
 
       {overlay && overlay.type==="interactionForm" && (()=>{
@@ -1317,6 +1382,9 @@ function App(){
           onSave={(form)=>{ saveInteraction(overlay.contactId, overlay.interaction, form); setOverlay({type:"contactDetail", id:overlay.contactId}); }}
           onClose={()=> setOverlay({type:"contactDetail", id:overlay.contactId})} />;
       })()}
+
+      {overlay && overlay.type==="ai" &&
+        <AIPanel title={overlay.title} run={overlay.run} onClose={()=> setOverlay(null)} />}
 
       {overlay && overlay.type==="dealForm" &&
         <DealForm deal={overlay.deal} contacts={data.contacts||[]} orgs={data.organizations||[]}

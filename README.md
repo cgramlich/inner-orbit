@@ -52,7 +52,11 @@ Never hardcode brand text/colors. Route through `APP_NAME`/`BRAND` config + an
 - [x] Explore-offline mode (local-only, no backend) for trying it before Supabase is wired
 - [x] **Phase 5:** Deals layer (gated) — pipeline by stage, open/won totals,
       deal form + detail with quick stage changes, contact/company linking
-- [ ] **Phase 4:** AI — summarize history / draft message (needs live backend to run)
+- [x] **Phase 4:** AI — ✨ Summarize history + ✨ Draft check-in on each contact,
+      via the relay (task-routed to Haiku); guarded to no-op offline. Runs once the backend is live.
+
+**V1 feature-complete.** Remaining to ship: stand up Supabase + deploy backend
+(unlocks AI + cross-device sync), then native build (Capacitor) + store listing.
 
 ## Try it now (no backend needed)
 Run `python dev_server.py` in this folder, open http://localhost:8300 (or 8302),
