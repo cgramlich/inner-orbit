@@ -65,22 +65,22 @@ OWNER_USER_IDS = {u for u in os.getenv("OWNER_USER_IDS", "").split(",") if u}
 DEBUG_KEY = os.getenv("DEBUG_KEY", "")
 
 # AI cost guardrails
-AI_MONTHLY_BUDGET_USD = float(os.getenv("AI_MONTHLY_BUDGET_USD", "50"))
-MAX_TOKENS_CEILING = int(os.getenv("AI_MAX_TOKENS_CEILING", "8192"))
+# `or` (not getenv default) so a blank env var falls back instead of crashing parse.
+AI_MONTHLY_BUDGET_USD = float(os.getenv("AI_MONTHLY_BUDGET_USD") or "50")
+MAX_TOKENS_CEILING = int(os.getenv("AI_MAX_TOKENS_CEILING") or "8192")
 
 # CORS — web origins + Capacitor native origins.
 #   iOS default scheme   = capacitor://localhost
 #   Android default      = https://localhost
 ALLOWED_ORIGINS = [
     o.strip()
-    for o in os.getenv(
-        "ALLOWED_ORIGINS",
+    for o in (os.getenv("ALLOWED_ORIGINS") or (
         "https://getinnerorbit.io,https://www.getinnerorbit.io,https://app.getinnerorbit.io,"
         "https://cgramlich.github.io,"
         "capacitor://localhost,https://localhost,http://localhost,"
         "http://localhost:8000,http://127.0.0.1:8000,"
-        "http://localhost:8300,http://127.0.0.1:8300,http://localhost:8302,http://127.0.0.1:8302",
-    ).split(",")
+        "http://localhost:8300,http://127.0.0.1:8300,http://localhost:8302,http://127.0.0.1:8302"
+    )).split(",")
     if o.strip()
 ]
 
