@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<!-- ORBIT - personal CRM - single-file PWA (Forever Apps stack) -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Orbit" />
+  <meta name="theme-color" content="#0e1116" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <title>Orbit</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+
+  <style>
+    /* ---- Orbit palette (cosmic indigo). Branding = drop-in swap. ---- */
+    :root{
+      --bg:#0e1116; --bg-2:#141925; --surface:#1a2030; --surface-2:#222a3d;
+      --line:#2c3650; --line-soft:#283044;
+      --text:#eef2fb; --text-dim:#a9b4cc; --text-faint:#6f7c99;
+      --accent:#6c8cff; --accent-dim:#4f6bd6;
+      --ok:#56c596; --amber:#e7b24c; --danger:#e5645a;
+      --shadow:0 8px 28px rgba(0,0,0,0.5);
+      --radius:16px;
+    }
+    :root[data-theme="light"]{
+      --bg:#f4f6fb; --bg-2:#eef1f8; --surface:#ffffff; --surface-2:#f3f5fb;
+      --line:#dde2ee; --line-soft:#e7ebf4;
+      --text:#161b26; --text-dim:#4d586f; --text-faint:#8893a8;
+      --accent:#4f6bd6; --accent-dim:#3f57b8;
+      --shadow:0 8px 24px rgba(20,30,60,0.12);
+    }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{ margin:0; padding:0; height:100%; }
+    body{
+      background:var(--bg); color:var(--text);
+      font-family:"Outfit",system-ui,-apple-system,sans-serif;
+      font-size:16px; line-height:1.45;
+      overscroll-behavior-y:none;
+    }
+    #root{ height:100%; }
+    h1,h2,h3{ font-family:"Space Grotesk","Outfit",sans-serif; margin:0; }
+    button{ font-family:inherit; cursor:pointer; }
+    a{ color:var(--accent); }
+
+    .app-shell{ display:flex; flex-direction:column; min-height:100%;
+      max-width:560px; margin:0 auto; }
+    .topbar{ position:sticky; top:0; z-index:20; padding:calc(env(safe-area-inset-top) + 14px) 18px 12px;
+      background:linear-gradient(180deg,var(--bg) 70%, rgba(14,17,22,0)); }
+    .topbar h1{ font-size:24px; letter-spacing:-0.4px; }
+    .topbar .sub{ color:var(--text-dim); font-size:13px; margin-top:2px; }
+    .content{ flex:1; padding:6px 16px 96px; }
+
+    .nav{ position:fixed; left:0; right:0; bottom:0; z-index:30;
+      display:flex; justify-content:space-around; align-items:center;
+      max-width:560px; margin:0 auto;
+      background:var(--surface); border-top:1px solid var(--line);
+      padding:8px 8px calc(env(safe-area-inset-bottom) + 8px); }
+    .nav button{ background:none; border:0; color:var(--text-faint);
+      display:flex; flex-direction:column; align-items:center; gap:3px;
+      font-size:11px; font-weight:500; padding:6px 10px; border-radius:12px; }
+    .nav button.on{ color:var(--accent); }
+    .nav .add{ width:48px; height:48px; border-radius:50%; background:var(--accent);
+      color:#fff; display:flex; align-items:center; justify-content:center;
+      font-size:26px; line-height:1; margin-top:-20px; box-shadow:var(--shadow); }
+
+    .card{ background:var(--surface); border:1px solid var(--line);
+      border-radius:var(--radius); padding:16px; margin-bottom:12px; box-shadow:var(--shadow); }
+    .btn{ background:var(--surface-2); color:var(--text); border:1px solid var(--line);
+      border-radius:12px; padding:11px 16px; font-size:15px; font-weight:600; width:100%; }
+    .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn.ghost{ background:none; border:none; color:var(--accent); width:auto; padding:8px; }
+    .btn.danger{ color:var(--danger); }
+    .row{ display:flex; gap:10px; align-items:center; }
+    .field{ margin-bottom:12px; }
+    .field label{ display:block; font-size:13px; color:var(--text-dim); margin-bottom:6px; }
+    .input{ width:100%; background:var(--bg-2); border:1px solid var(--line); color:var(--text);
+      border-radius:12px; padding:12px 14px; font-size:16px; }
+    .input:focus{ outline:none; border-color:var(--accent); }
+
+    .empty{ text-align:center; color:var(--text-dim); padding:56px 20px; }
+    .empty .glyph{ font-size:40px; opacity:.5; margin-bottom:10px; }
+    .muted{ color:var(--text-faint); font-size:13px; }
+    .pill{ display:inline-block; background:var(--surface-2); border:1px solid var(--line);
+      color:var(--text-dim); border-radius:999px; padding:3px 10px; font-size:12px; margin:2px 4px 2px 0; }
+
+    .syncbar{ position:fixed; top:env(safe-area-inset-top); left:0; right:0; z-index:40;
+      display:flex; align-items:center; gap:10px; justify-content:center;
+      background:var(--accent); color:#fff; font-size:13px; font-weight:600; padding:8px 14px;
+      max-width:560px; margin:0 auto; }
+    .syncbar button{ background:rgba(255,255,255,.2); border:0; color:#fff;
+      border-radius:8px; padding:5px 12px; font-weight:600; }
+    .toast{ position:fixed; bottom:96px; left:50%; transform:translateX(-50%); z-index:50;
+      background:var(--surface-2); color:var(--text); border:1px solid var(--line);
+      border-radius:12px; padding:10px 18px; font-size:14px; box-shadow:var(--shadow);
+      max-width:90%; }
+
+    /* auth */
+    .auth-wrap{ min-height:100%; display:flex; flex-direction:column; justify-content:center;
+      max-width:420px; margin:0 auto; padding:32px 22px; }
+    .brand{ text-align:center; margin-bottom:26px; }
+    .brand .mark{ font-family:"Space Grotesk",sans-serif; font-size:40px; font-weight:700;
+      letter-spacing:-1px; background:linear-gradient(120deg,var(--accent),#a78bff);
+      -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .brand .tag{ color:var(--text-dim); font-size:14px; margin-top:4px; }
+    .notice{ background:var(--surface-2); border:1px solid var(--line); border-radius:12px;
+      padding:12px 14px; font-size:13px; color:var(--text-dim); margin-bottom:14px; }
+    .err{ color:var(--danger); font-size:13px; margin:8px 2px; }
+  </style>
+
+  <script>
+    /* Apply saved theme before first paint (no flash). Dark is the default. */
+    (function(){
+      try {
+        var t = localStorage.getItem('orbit_theme');
+        if (t && t !== 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch(e){}
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+/* ============================================================
+   ORBIT - application code (shell)
+   ============================================================ */
+const { useState, useEffect, useRef, useCallback } = React;
+
+/* ---- branding / config ---------------------------------------------- */
+const APP_VERSION = "0.1.0";
+const BRAND = { name: "Orbit", tagline: "Stay close to the people in your orbit." };
+
+// Hosted backend base. Overridable per-user in Settings.
+// TODO: set to the deployed Railway URL once the Orbit backend is live.
+const API_BASE_DEFAULT = "http://localhost:8000";
+
+// Supabase Auth. The publishable (anon) key is public by design.
+// TODO: fill these in once the Orbit Supabase project is created.
+const SUPABASE_URL = "";
+const SUPABASE_PUBLISHABLE_KEY = "";
+
+const CFG_KEY  = "orbit_config";
+const DATA_KEY = "orbit_data";
+
+// CRM collections (must match the backend COLLECTIONS).
+const ARRAY_COLLECTIONS  = ["contacts","organizations","interactions","tasks","deals"];
+const OBJECT_COLLECTIONS = ["meta"];
+const ALL_COLLECTIONS    = ARRAY_COLLECTIONS.concat(OBJECT_COLLECTIONS);
+
+/* ---- tiny utils ------------------------------------------------------ */
+const LOG = [];
+function logMsg(tag,msg){ const line="["+tag+"] "+msg; LOG.push(line); if(LOG.length>300)LOG.shift();
+  if (tag==="ERROR"||tag==="WARN") console.warn(line); }
+function uid(p){ return (p||"id")+"_"+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function apiBase(cfg){ return (((cfg&&cfg.apiBase)||API_BASE_DEFAULT)).replace(/\/+$/,""); }
+
+/* ---- config + cache (localStorage) ----------------------------------- */
+function loadConfig(){
+  try { return JSON.parse(localStorage.getItem(CFG_KEY)||"{}") || {}; } catch(e){ return {}; }
+}
+function saveConfig(cfg){
+  try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch(e){}
+}
+function loadCache(){
+  try { return JSON.parse(localStorage.getItem(DATA_KEY)||"null"); } catch(e){ return null; }
+}
+function saveCache(payload){
+  try { localStorage.setItem(DATA_KEY, JSON.stringify(payload)); } catch(e){}
+}
+function configComplete(cfg){ return !!(cfg && cfg.accessToken && cfg.userId); }
+function emptyData(){
+  const d = {}; ARRAY_COLLECTIONS.forEach(c=> d[c]=[]); OBJECT_COLLECTIONS.forEach(c=> d[c]={}); return d;
+}
+
+/* ---- Supabase auth: bearer token + silent refresh -------------------- */
+/* Lifted from the MenuCaptain shell (the proven Forever Apps auth plumbing). */
+let _refreshPromise = null;
+
+function signOutHard(){
+  try { localStorage.removeItem(CFG_KEY); localStorage.removeItem(DATA_KEY); } catch(e){}
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller){
+      navigator.serviceWorker.controller.postMessage({ type:"clearCache" });
+    }
+  } catch(e){}
+  location.reload();
+}
+
+async function doRefresh(cfg){
+  if (!cfg.refreshToken){ signOutHard(); throw new Error("no refresh token"); }
+  let res;
+  try {
+    res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "apikey":SUPABASE_PUBLISHABLE_KEY },
+      body:JSON.stringify({ refresh_token: cfg.refreshToken }),
+    });
+  } catch(err){ logMsg("ERROR","token refresh network error: "+err.message); throw err; }
+  if (!res.ok){ logMsg("ERROR","token refresh rejected "+res.status); signOutHard(); throw new Error("refresh rejected"); }
+  const data = await res.json();
+  cfg.accessToken  = data.access_token;
+  cfg.refreshToken = data.refresh_token || cfg.refreshToken;
+  cfg.expiresAt    = data.expires_at || (Math.floor(Date.now()/1000) + (data.expires_in||3600));
+  saveConfig(cfg);
+  return cfg.accessToken;
+}
+
+async function getFreshToken(cfg){
+  const nowMs = Date.now();
+  const expMs = cfg.expiresAt ? cfg.expiresAt*1000 : 0;
+  if (cfg.accessToken && (expMs - nowMs) > 60000) return cfg.accessToken;
+  if (!_refreshPromise) _refreshPromise = doRefresh(cfg).finally(()=>{ _refreshPromise=null; });
+  return await _refreshPromise;
+}
+
+async function authHeaders(cfg){
+  const token = await getFreshToken(cfg);
+  return { "Authorization":"Bearer "+token, "X-User-ID":cfg.userId };
+}
+
+/* sign-in / sign-up via Supabase Auth REST */
+async function supabasePassword(grant, email, password){
+  if (!SUPABASE_URL) throw new Error("Supabase isn't configured yet.");
+  const path = grant==="signup" ? "/auth/v1/signup" : "/auth/v1/token?grant_type=password";
+  const res = await fetch(SUPABASE_URL + path, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", "apikey":SUPABASE_PUBLISHABLE_KEY },
+    body:JSON.stringify({ email, password }),
+  });
+  const data = await res.json().catch(()=> ({}));
+  if (!res.ok) throw new Error(data.error_description || data.msg || data.error || ("Auth failed ("+res.status+")"));
+  return data;
+}
+
+/* ---- native push (Capacitor only; gated OFF until Firebase) ---------- */
+const PUSH_ENABLED = false;
+let _pushInited = false;
+async function initPush(cfg){
+  try {
+    if (!PUSH_ENABLED) return;
+    const Cap = window.Capacitor;
+    if (!Cap || typeof Cap.isNativePlatform !== "function" || !Cap.isNativePlatform()) return;
+    const PN = Cap.Plugins && Cap.Plugins.PushNotifications;
+    if (!PN || _pushInited) return;
+    _pushInited = true;
+    const platform = (typeof Cap.getPlatform==="function" ? Cap.getPlatform() : "unknown");
+    PN.addListener("registration", async (tok)=>{
+      try {
+        if (!tok || !tok.value) return;
+        await fetch(apiBase(cfg)+"/api/push/register", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json", ...(await authHeaders(cfg)) },
+          body:JSON.stringify({ token:tok.value, platform }),
+        });
+      } catch(e){ logMsg("WARN","push register failed: "+(e&&e.message)); }
+    });
+    const perm = await PN.requestPermissions();
+    if (perm && perm.receive==="granted") await PN.register();
+    else _pushInited = false;
+  } catch(e){ logMsg("WARN","initPush failed: "+(e&&e.message)); _pushInited=false; }
+}
+
+/* ---- collections API client ----------------------------------------- */
+async function getCollection(cfg, name){
+  const res = await fetch(apiBase(cfg)+"/api/collection/"+name, { headers: await authHeaders(cfg) });
+  if (!res.ok) throw new Error("GET "+name+" -> "+res.status);
+  return res.json();
+}
+async function putCollection(cfg, name, data){
+  const res = await fetch(apiBase(cfg)+"/api/collection/"+name, {
+    method:"PUT",
+    headers:{ "Content-Type":"application/json", ...(await authHeaders(cfg)) },
+    body:JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("PUT "+name+" -> "+res.status);
+  return res.json();
+}
+
+/* ---- AI relay client ------------------------------------------------- */
+async function aiRelay(cfg, { task, messages, system, max_tokens }){
+  const res = await fetch(apiBase(cfg)+"/api/ai/relay", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...(await authHeaders(cfg)) },
+    body:JSON.stringify({ task, model:"claude-haiku-4-5-20251001", max_tokens:max_tokens||1024, messages, system }),
+  });
+  const data = await res.json().catch(()=> ({}));
+  if (!res.ok) { const e=new Error(data.detail||("AI failed "+res.status)); e.status=res.status; throw e; }
+  return (data.content||[]).map(b=> b.text||"").join("").trim();
+}
+
+/* ---- version check / in-app updater --------------------------------- */
+async function fetchDeployedVersion(){
+  try {
+    const url = location.pathname + "?vcheck=" + Date.now();
+    const res = await fetch(url, { cache:"no-store" });
+    const html = await res.text();
+    const m = html.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+    return m ? m[1] : null;
+  } catch(e){ return null; }
+}
+function isNewer(a,b){
+  const pa=(a||"0").split(".").map(Number), pb=(b||"0").split(".").map(Number);
+  for (let i=0;i<3;i++){ if((pa[i]||0)>(pb[i]||0))return true; if((pa[i]||0)<(pb[i]||0))return false; }
+  return false;
+}
+function applyUpdate(version){
+  const base = location.origin + location.pathname;
+  location.replace(base + "?v=" + encodeURIComponent(version||Date.now()));
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+function Icon({ name }){
+  const map = {
+    home:"⌂", people:"\u{1F465}", deals:"\u{1F4BC}", settings:"⚙︎",
+    plus:"+", clock:"⏱︎", bell:"\u{1F514}",
+  };
+  return <span aria-hidden="true">{map[name]||"•"}</span>;
+}
+
+function TopBar({ tab }){
+  const titles = {
+    home:[BRAND.name, "Who to reach out to"],
+    people:["People", "Your contacts & companies"],
+    deals:["Deals", "Opportunities pipeline"],
+    settings:["Settings", "Account & preferences"],
+  };
+  const [t,s] = titles[tab] || [BRAND.name, ""];
+  return <div className="topbar"><h1>{t}</h1>{s && <div className="sub">{s}</div>}</div>;
+}
+
+function AuthScreen({ onSignedIn }){
+  const [mode,setMode] = useState("signin");
+  const [email,setEmail] = useState("");
+  const [pw,setPw] = useState("");
+  const [busy,setBusy] = useState(false);
+  const [err,setErr] = useState("");
+  const [info,setInfo] = useState("");
+
+  async function submit(){
+    setErr(""); setInfo(""); setBusy(true);
+    try {
+      const data = await supabasePassword(mode, email.trim(), pw);
+      if (!data.access_token){
+        // signup with email confirmation on: no session yet
+        setInfo("Check your email to confirm your account, then sign in.");
+        setMode("signin"); return;
+      }
+      const cfg = loadConfig();
+      cfg.accessToken  = data.access_token;
+      cfg.refreshToken = data.refresh_token;
+      cfg.expiresAt    = data.expires_at || (Math.floor(Date.now()/1000)+(data.expires_in||3600));
+      cfg.userId       = data.user && data.user.id;
+      cfg.email        = data.user && data.user.email;
+      saveConfig(cfg);
+      onSignedIn(cfg);
+    } catch(e){ setErr(e.message || "Something went wrong."); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="auth-wrap">
+      <div className="brand">
+        <div className="mark">Orbit</div>
+        <div className="tag">{BRAND.tagline}</div>
+      </div>
+      {!SUPABASE_URL && (
+        <div className="notice">
+          Supabase isn't configured yet. Create the Orbit Supabase project, run
+          <code> backend/schema.sql</code>, then set <code>SUPABASE_URL</code> and
+          <code> SUPABASE_PUBLISHABLE_KEY</code> in index.html to enable sign-in.
+        </div>
+      )}
+      <div className="field">
+        <label>Email</label>
+        <input className="input" type="email" autoComplete="email" value={email}
+          onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" />
+      </div>
+      <div className="field">
+        <label>Password</label>
+        <input className="input" type="password" autoComplete={mode==="signup"?"new-password":"current-password"}
+          value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" />
+      </div>
+      {err && <div className="err">{err}</div>}
+      {info && <div className="notice">{info}</div>}
+      <button className="btn primary" disabled={busy} onClick={submit} style={{marginTop:6}}>
+        {busy ? "…" : (mode==="signup" ? "Create account" : "Sign in")}
+      </button>
+      <div style={{textAlign:"center", marginTop:14}}>
+        <button className="btn ghost" onClick={()=>{ setMode(mode==="signup"?"signin":"signup"); setErr(""); }}>
+          {mode==="signup" ? "Have an account? Sign in" : "New here? Create an account"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Placeholder({ glyph, title, note }){
+  return (
+    <div className="empty">
+      <div className="glyph">{glyph}</div>
+      <h3 style={{marginBottom:6}}>{title}</h3>
+      <div className="muted">{note}</div>
+    </div>
+  );
+}
+
+function HomeView({ data }){
+  const tasks = (data.tasks||[]).filter(t=>!t.done);
+  return (
+    <div>
+      {tasks.length===0
+        ? <Placeholder glyph={"\u{1F44B}"} title="No follow-ups yet"
+            note="Once you add contacts and set a cadence, the people you're due to reach out to will show up here." />
+        : <div className="card"><b>{tasks.length}</b> follow-up{tasks.length>1?"s":""} due</div>}
+    </div>
+  );
+}
+
+function PeopleView({ data }){
+  const people = data.contacts||[];
+  return (
+    <div>
+      {people.length===0
+        ? <Placeholder glyph={"\u{1F465}"} title="No contacts yet"
+            note="Adding contacts, companies, and tags is the next build step." />
+        : people.map(c=> <div key={c.id} className="card">{c.name||"(unnamed)"}</div>)}
+    </div>
+  );
+}
+
+function DealsView(){
+  return <Placeholder glyph={"\u{1F4BC}"} title="Deals are off" note="Enable the deals layer in Settings to track opportunities." />;
+}
+
+function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updateVer }){
+  const theme = cfg.theme || "dark";
+  function setTheme(t){
+    const next = {...cfg, theme:t}; onCfg(next);
+    try { localStorage.setItem("orbit_theme", t); } catch(e){}
+    if (t==="dark") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+  }
+  return (
+    <div>
+      <div className="card">
+        <div className="muted" style={{marginBottom:8}}>Signed in as</div>
+        <div style={{fontWeight:600}}>{cfg.email || cfg.userId || "—"}</div>
+      </div>
+
+      <div className="card">
+        <div className="field" style={{marginBottom:8}}><label>Appearance</label></div>
+        <div className="row">
+          <button className={"btn"+(theme==="dark"?" primary":"")} onClick={()=>setTheme("dark")}>Dark</button>
+          <button className={"btn"+(theme==="light"?" primary":"")} onClick={()=>setTheme("light")}>Light</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="row" style={{justifyContent:"space-between"}}>
+          <div><div style={{fontWeight:600}}>Deals layer</div>
+            <div className="muted">Track opportunities & pipeline</div></div>
+          <button className={"btn"+(cfg.dealsEnabled?" primary":"")} style={{width:"auto"}}
+            onClick={()=> onCfg({...cfg, dealsEnabled: !cfg.dealsEnabled})}>
+            {cfg.dealsEnabled ? "On" : "Off"}
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="row" style={{justifyContent:"space-between"}}>
+          <div><div style={{fontWeight:600}}>Version {APP_VERSION}</div>
+            <div className="muted">{updateVer ? "Update "+updateVer+" available" : "Up to date"}</div></div>
+          <button className="btn" style={{width:"auto"}} onClick={onCheckUpdate}>Check</button>
+        </div>
+      </div>
+
+      <button className="btn danger" onClick={onLogout} style={{marginTop:4}}>Sign out</button>
+    </div>
+  );
+}
+
+function App(){
+  const [cfg,setCfg] = useState(()=> loadConfig());
+  const [authed,setAuthed] = useState(()=> configComplete(loadConfig()));
+  const [tab,setTab] = useState("home");
+  const [data,setData] = useState(()=> loadCache() || emptyData());
+  const [toast,setToast] = useState("");
+  const [updateVer,setUpdateVer] = useState(null);
+  const loadedOnce = useRef(false);
+
+  function flash(msg){ setToast(msg); setTimeout(()=> setToast(""), 2600); }
+  function applyCfg(next){ setCfg(next); saveConfig(next); }
+
+  // Service worker registration + version check.
+  useEffect(()=>{
+    if (!("serviceWorker" in navigator)) return;
+    const onLoad = ()=> navigator.serviceWorker.register("/sw.js")
+      .then(()=> logMsg("SW","registered")).catch(e=> logMsg("WARN","SW register: "+(e&&e.message)));
+    if (document.readyState==="complete") onLoad();
+    else window.addEventListener("load", onLoad);
+    return ()=> window.removeEventListener("load", onLoad);
+  },[]);
+
+  const checkUpdate = useCallback(async ()=>{
+    const v = await fetchDeployedVersion();
+    if (v && isNewer(v, APP_VERSION)) setUpdateVer(v);
+    else flash("You're up to date");
+  },[]);
+  useEffect(()=>{ const t=setTimeout(checkUpdate, 2000); return ()=> clearTimeout(t); },[checkUpdate]);
+
+  // Initial data load from the backend once signed in.
+  useEffect(()=>{
+    if (!authed || loadedOnce.current) return;
+    loadedOnce.current = true;
+    (async ()=>{
+      try {
+        const next = emptyData();
+        for (const name of ALL_COLLECTIONS){
+          try { next[name] = await getCollection(cfg, name); } catch(e){ logMsg("WARN","load "+name+": "+e.message); }
+        }
+        setData(next); saveCache(next);
+        initPush(cfg);
+      } catch(e){ logMsg("ERROR","initial load: "+e.message); }
+    })();
+  },[authed]);  // eslint-disable-line
+
+  if (!authed){
+    return <AuthScreen onSignedIn={(c)=>{ setCfg(c); setAuthed(true); }} />;
+  }
+
+  const showDeals = !!cfg.dealsEnabled;
+  let screen;
+  if (tab==="home") screen = <HomeView data={data} />;
+  else if (tab==="people") screen = <PeopleView data={data} />;
+  else if (tab==="deals") screen = <DealsView />;
+  else screen = <SettingsView cfg={cfg} onCfg={applyCfg} onLogout={signOutHard}
+                    onCheckUpdate={checkUpdate} updateVer={updateVer} />;
+
+  return (
+    <div className="app-shell">
+      {updateVer && (
+        <div className="syncbar"><span>Update available</span>
+          <button onClick={()=> applyUpdate(updateVer)}>Reload</button></div>
+      )}
+      <TopBar tab={tab} />
+      <div className="content">{screen}</div>
+      {toast && <div className="toast">{toast}</div>}
+      <nav className="nav">
+        <button className={tab==="home"?"on":""} onClick={()=>setTab("home")}><Icon name="home"/>Home</button>
+        <button className={tab==="people"?"on":""} onClick={()=>setTab("people")}><Icon name="people"/>People</button>
+        <button onClick={()=> flash("Adding contacts comes next")}><span className="add"><Icon name="plus"/></span></button>
+        {showDeals
+          ? <button className={tab==="deals"?"on":""} onClick={()=>setTab("deals")}><Icon name="deals"/>Deals</button>
+          : <button className={tab==="settings"?"on":""} onClick={()=>setTab("settings")}><Icon name="settings"/>Settings</button>}
+        {showDeals &&
+          <button className={tab==="settings"?"on":""} onClick={()=>setTab("settings")}><Icon name="settings"/>Settings</button>}
+      </nav>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

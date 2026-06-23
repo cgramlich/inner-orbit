@@ -41,7 +41,9 @@ Never hardcode brand text/colors. Route through `APP_NAME`/`BRAND` config + an
 ## Status
 - [x] Repo + infra: `sw.js`, `manifest.json`, `build.js`, `capacitor.config.json`
 - [x] Backend skeleton + schema (`backend/`)
-- [ ] `index.html` shell (auth, sync, settings, nav, collections + AI clients) — next
+- [x] `index.html` shell — auth screen, nav, settings (theme + deals toggle),
+      collections + AI relay clients, sync loader, SW registration, in-app updater
+      (compiles + renders clean; placeholder CRM screens)
 - [ ] CRM domain: contacts/orgs/tags → interactions/follow-ups → AI → deals
 - [ ] Supabase project created + `schema.sql` applied
 - [ ] Native build (vendor libs, icons) + store listing
