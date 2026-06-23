@@ -44,7 +44,11 @@ Never hardcode brand text/colors. Route through `APP_NAME`/`BRAND` config + an
 - [x] `index.html` shell — auth screen, nav, settings (theme + deals toggle),
       collections + AI relay clients, sync loader, SW registration, in-app updater
       (compiles + renders clean; placeholder CRM screens)
-- [ ] CRM domain: contacts/orgs/tags → interactions/follow-ups → AI → deals
+- [x] **Phase 2:** Contacts + Organizations + Tags — list/search/filter, add/edit/delete,
+      contact↔company linking, contact & company detail views
+- [ ] **Phase 3 (next):** Interactions log + follow-up engine + Home "who to reach out to"
+- [ ] Phase 4: AI (summarize / draft message / reconnect opener)
+- [ ] Phase 5: Deals layer (gated pipeline)
 - [ ] Supabase project created + `schema.sql` applied
 - [ ] Native build (vendor libs, icons) + store listing
 
