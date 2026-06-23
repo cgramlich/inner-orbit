@@ -211,9 +211,8 @@ const { useState, useEffect, useRef, useCallback } = React;
 const APP_VERSION = "0.1.0";
 const BRAND = { name: "Inner Orbit", tagline: "Stay close to the people in your orbit." };
 
-// Hosted backend base. Overridable per-user in Settings.
-// TODO: set to the deployed Railway URL once the Orbit backend is live.
-const API_BASE_DEFAULT = "http://localhost:8000";
+// Hosted backend base (Railway). Overridable per-user in Settings.
+const API_BASE_DEFAULT = "https://inner-orbit-production.up.railway.app";
 
 // Supabase Auth. The publishable (anon) key is public by design — safe to ship.
 const SUPABASE_URL = "https://efzuuqhraaxwsrkqfavn.supabase.co";
