@@ -593,7 +593,7 @@ function HomeView({ data, onOpenContact, onQuickLog, onToggleTask }){
   );
 }
 
-function PeopleView({ data, onOpenContact, onOpenOrg }){
+function PeopleView({ data, onOpenContact, onOpenOrg, onImport }){
   const [seg,setSeg] = useState("people");
   const [q,setQ] = useState("");
   const [tag,setTag] = useState("");
@@ -635,8 +635,13 @@ function PeopleView({ data, onOpenContact, onOpenOrg }){
 
       {seg==="people" ? (
         people.length===0
-          ? <Placeholder glyph={"\u{1F465}"} title={contacts.length===0?"No contacts yet":"No matches"}
-              note={contacts.length===0?"Tap the + button to add your first contact.":"Try a different search or tag."} />
+          ? (contacts.length===0
+              ? <div>
+                  <Placeholder glyph={"\u{1F465}"} title="No contacts yet"
+                    note="Import your phone or Google contacts to start — or tap + to add one by hand." />
+                  <button className="btn primary" style={{maxWidth:320, margin:"0 auto", display:"block"}} onClick={onImport}>Import contacts</button>
+                </div>
+              : <Placeholder glyph={"\u{1F465}"} title="No matches" note="Try a different search or tag." />)
           : people.map(c=>{
               const org = orgs.find(o=> o.id===c.org_id);
               const sub = [c.title, org && org.name].filter(Boolean).join(" · ") || (c.emails&&c.emails[0]) || "";
@@ -786,7 +791,7 @@ function DealDetail({ deal, contact, org, onEdit, onDelete, onClose, onStage, on
   );
 }
 
-function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updateVer }){
+function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updateVer, onImport }){
   const theme = cfg.theme || "dark";
   function setTheme(t){
     const next = {...cfg, theme:t}; onCfg(next);
@@ -806,6 +811,14 @@ function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updateVer }){
         <div className="row">
           <button className={"btn"+(theme==="dark"?" primary":"")} onClick={()=>setTheme("dark")}>Dark</button>
           <button className={"btn"+(theme==="light"?" primary":"")} onClick={()=>setTheme("light")}>Light</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="row" style={{justifyContent:"space-between"}}>
+          <div><div style={{fontWeight:600}}>Import contacts</div>
+            <div className="muted">From a .vcf (iPhone / Google export)</div></div>
+          <button className="btn" style={{width:"auto"}} onClick={onImport}>Import</button>
         </div>
       </div>
 
@@ -1132,6 +1145,153 @@ function AddSheet({ onClose, onContact, onCompany, onDeal, dealsEnabled }){
   );
 }
 
+/* ============================================================
+   CONTACT IMPORT (vCard) + dedupe — Phase 6
+   ============================================================ */
+function emailKey(e){ return (e||"").trim().toLowerCase(); }
+function phoneKey(p){ const d=(p||"").replace(/\D/g,""); return d.length>10 ? d.slice(-10) : d; }
+function uniqBy(arr, keyFn){
+  const seen=new Set(), out=[];
+  for(const v of arr){ const k=keyFn(v); if(!k){ continue; } if(!seen.has(k)){ seen.add(k); out.push(v); } }
+  return out;
+}
+function normBday(v){
+  v=(v||"").trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0,10);
+  if(/^\d{8}$/.test(v)) return v.slice(0,4)+"-"+v.slice(4,6)+"-"+v.slice(6,8);
+  return "";
+}
+function qpDecode(s){
+  const bytes=[]; s=s.replace(/=\r?\n/g,"");
+  for(let i=0;i<s.length;i++){
+    if(s[i]==="=" && i+2<s.length && /[0-9A-Fa-f]{2}/.test(s.substr(i+1,2))){ bytes.push(parseInt(s.substr(i+1,2),16)); i+=2; }
+    else bytes.push(s.charCodeAt(i));
+  }
+  try { return new TextDecoder("utf-8").decode(new Uint8Array(bytes)); } catch(e){ return s; }
+}
+function parseVCards(text){
+  const cards=[];
+  const blocks=text.split(/BEGIN:VCARD/i).slice(1);
+  for(let raw of blocks){
+    raw=raw.split(/END:VCARD/i)[0];
+    const unfolded=raw.replace(/\r\n[ \t]/g,"").replace(/\n[ \t]/g,"");
+    const lines=unfolded.split(/\r\n|\n|\r/).map(l=>l.replace(/\s+$/,"")).filter(Boolean);
+    const c={ name:"", emails:[], phones:[], orgName:"", title:"", location:"", birthday:"", notes:"" };
+    let nFallback="";
+    for(const line of lines){
+      const idx=line.indexOf(":"); if(idx===-1) continue;
+      const left=line.slice(0,idx); let value=line.slice(idx+1);
+      const params=left.split(";"); const prop=params[0].toUpperCase().replace(/^ITEM\d+\./,"");
+      if(params.some(p=>/QUOTED-PRINTABLE/i.test(p))) value=qpDecode(value);
+      const unesc=(x)=> (x||"").replace(/\\n/gi," ").replace(/\\,/g,",").replace(/\\;/g,";").replace(/\\\\/g,"\\").trim();
+      if(prop==="FN") c.name=unesc(value);
+      else if(prop==="N"){ const f=value.split(";").map(unesc); nFallback=[f[3],f[1],f[2],f[0],f[4]].filter(Boolean).join(" ").trim(); }
+      else if(prop==="EMAIL"){ const e=unesc(value); if(e) c.emails.push(e); }
+      else if(prop==="TEL"){ const t=unesc(value); if(t) c.phones.push(t); }
+      else if(prop==="ORG"&&!c.orgName){ c.orgName=unesc(value.split(";")[0]); }
+      else if(prop==="TITLE"&&!c.title){ c.title=unesc(value); }
+      else if(prop==="ADR"&&!c.location){ const a=value.split(";").map(unesc); c.location=[a[3],a[4]].filter(Boolean).join(", "); }
+      else if(prop==="BDAY"&&!c.birthday){ c.birthday=normBday(unesc(value)); }
+      else if(prop==="NOTE"&&!c.notes){ c.notes=unesc(value); }
+    }
+    if(!c.name) c.name=nFallback;
+    c.emails=uniqBy(c.emails, emailKey);
+    c.phones=uniqBy(c.phones.map(p=>p.trim()), phoneKey);
+    if(c.name || c.emails.length || c.phones.length) cards.push(c);
+  }
+  return cards;
+}
+// Classify drafts vs existing contacts; collapse within-file dupes. Returns rows.
+function planImport(drafts, existing){
+  const idx=new Map();
+  for(const c of (existing||[])){
+    for(const e of (c.emails||[])){ const k=emailKey(e); if(k) idx.set("e:"+k, c.id); }
+    for(const p of (c.phones||[])){ const k=phoneKey(p); if(k) idx.set("p:"+k, c.id); }
+  }
+  const rows=[]; const batch=new Map();
+  for(const d of drafts){
+    const keys=[];
+    for(const e of d.emails){ const k=emailKey(e); if(k) keys.push("e:"+k); }
+    for(const p of d.phones){ const k=phoneKey(p); if(k) keys.push("p:"+k); }
+    let bi=-1; for(const k of keys){ if(batch.has(k)){ bi=batch.get(k); break; } }
+    if(bi>=0){ const a=rows[bi].draft;
+      a.emails=uniqBy([...a.emails,...d.emails], emailKey); a.phones=uniqBy([...a.phones,...d.phones], phoneKey);
+      a.name=a.name||d.name; a.orgName=a.orgName||d.orgName; a.title=a.title||d.title;
+      a.location=a.location||d.location; a.birthday=a.birthday||d.birthday; a.notes=a.notes||d.notes;
+      for(const k of keys) batch.set(k,bi); continue;
+    }
+    let target=null; for(const k of keys){ if(idx.has(k)){ target=idx.get(k); break; } }
+    rows.push({ draft:d, target, include:true });
+    const mi=rows.length-1; for(const k of keys) batch.set(k,mi);
+  }
+  return rows;
+}
+
+function ImportFlow({ existingContacts, onApply, onClose }){
+  const [stage,setStage]=useState("pick");
+  const [rows,setRows]=useState([]);
+  const [err,setErr]=useState("");
+  function onFile(e){
+    const f=e.target.files && e.target.files[0]; if(!f) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        const drafts=parseVCards(String(reader.result||""));
+        if(!drafts.length){ setErr("No contacts found — make sure it's a .vcf (vCard) export."); return; }
+        setRows(planImport(drafts, existingContacts)); setErr(""); setStage("review");
+      }catch(ex){ setErr("Couldn't read that file: "+(ex&&ex.message)); }
+    };
+    reader.readAsText(f);
+  }
+  const targetName=(id)=> (existingContacts.find(c=>c.id===id)||{}).name || "existing";
+  const newCount=rows.filter(r=>r.include && !r.target).length;
+  const mergeCount=rows.filter(r=>r.include && r.target).length;
+  function toggle(i){ setRows(rows.map((r,j)=> j===i?{...r,include:!r.include}:r)); }
+
+  if(stage==="pick") return (
+    <div className="overlay">
+      <div className="overlay-head"><button className="icon-btn" onClick={onClose}>←</button><b>Import contacts</b><span style={{width:34}} /></div>
+      <div className="overlay-body">
+        <p className="muted">Upload a <b>.vcf</b> (vCard) file from your phone or Google Contacts. It's parsed right here on your device and only saved to your own account.</p>
+        <label className="btn primary" style={{display:"block", textAlign:"center", marginTop:6}}>
+          Choose .vcf file
+          <input type="file" accept=".vcf,.vcard,text/vcard" style={{display:"none"}} onChange={onFile} />
+        </label>
+        {err && <div className="err">{err}</div>}
+        <div className="card" style={{marginTop:16}}>
+          <div style={{fontWeight:600, marginBottom:6}}>How to export a .vcf</div>
+          <div className="muted"><b>iPhone / iCloud:</b> icloud.com → Contacts → select all (Ctrl/Cmd-A) → gear ⚙︎ → Export vCard.<br/><br/><b>Google:</b> contacts.google.com → Export → vCard.</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="overlay">
+      <div className="overlay-head">
+        <button className="icon-btn" onClick={()=>setStage("pick")}>←</button>
+        <b>Review import</b>
+        <button className="btn ghost" disabled={newCount+mergeCount===0} onClick={()=> onApply(rows)}>Import</button>
+      </div>
+      <div className="overlay-body">
+        <div className="card"><b>{newCount}</b> new · <b>{mergeCount}</b> to merge into existing
+          {rows.length-(newCount+mergeCount)>0 && <span className="muted"> · {rows.length-(newCount+mergeCount)} skipped</span>}</div>
+        {rows.slice(0,300).map((r,i)=> (
+          <div key={i} className="task-row">
+            <input type="checkbox" checked={r.include} onChange={()=>toggle(i)} />
+            <div className="lr-main" style={{opacity:r.include?1:0.5}}>
+              <div className="lr-name">{r.draft.name||"(no name)"}</div>
+              <div className="muted">{[(r.draft.emails[0]||r.draft.phones[0]||""), r.target?("merge → "+targetName(r.target)):null].filter(Boolean).join(" · ")}</div>
+            </div>
+            <span className={"pill"+(r.target?"":" on")}>{r.target?"Merge":"New"}</span>
+          </div>
+        ))}
+        {rows.length>300 && <div className="muted" style={{marginTop:10}}>+{rows.length-300} more will also be imported.</div>}
+      </div>
+    </div>
+  );
+}
+
 /* Runs an async AI thunk and shows loading -> result with a Copy button. */
 function AIPanel({ title, run, onClose }){
   const [state,setState] = useState("loading");   // loading | done | error
@@ -1283,6 +1443,45 @@ function App(){
       run: ()=> aiRelay(cfg, { task:"draft_message", system:sys, messages:[{role:"user", content:ctx}], max_tokens:300 }) });
   }
 
+  // Apply a reviewed contact import (Phase 6). Batches orgs + contacts into one save each.
+  function applyImport(rows){
+    let contacts=[...(data.contacts||[])];
+    let orgs=[...(data.organizations||[])];
+    const orgByName=new Map(orgs.map(o=>[(o.name||"").toLowerCase(), o]));
+    function ensureOrgLocal(name){
+      const nm=(name||"").trim(); if(!nm) return null;
+      const ex=orgByName.get(nm.toLowerCase()); if(ex) return ex.id;
+      const o={ id:uid("org"), name:nm, type:"", website:"", location:"", tags:[], notes:"", created_at:todayISO(), updated_at:todayISO() };
+      orgs=[o,...orgs]; orgByName.set(nm.toLowerCase(), o); return o.id;
+    }
+    const byId=new Map(contacts.map(c=>[c.id,c]));
+    let added=0, mergedN=0;
+    for(const r of rows){
+      if(!r.include) continue;
+      const org_id=ensureOrgLocal(r.draft.orgName);
+      if(r.target && byId.has(r.target)){
+        const ex=byId.get(r.target);
+        const upd={ ...ex,
+          emails:uniqBy([...(ex.emails||[]), ...r.draft.emails], emailKey),
+          phones:uniqBy([...(ex.phones||[]), ...r.draft.phones], phoneKey),
+          org_id: ex.org_id||org_id, title: ex.title||r.draft.title, location: ex.location||r.draft.location,
+          birthday: ex.birthday||r.draft.birthday, notes: ex.notes||r.draft.notes, name: ex.name||r.draft.name,
+          updated_at: todayISO() };
+        contacts=contacts.map(c=> c.id===ex.id?upd:c); byId.set(ex.id, upd); mergedN++;
+      } else {
+        const c={ id:uid("c"), name:r.draft.name||"(no name)", emails:r.draft.emails, phones:r.draft.phones,
+          org_id, title:r.draft.title||"", location:r.draft.location||"", tags:[], how_we_met:"",
+          birthday:r.draft.birthday||"", notes:r.draft.notes||"", cadence_days:null, last_interaction_at:null,
+          created_at:todayISO(), updated_at:todayISO() };
+        contacts=[c, ...contacts]; byId.set(c.id, c); added++;
+      }
+    }
+    saveCollection("contacts", contacts);
+    saveCollection("organizations", orgs);
+    setOverlay(null);
+    flash("Imported "+added+" new"+(mergedN?(" · merged "+mergedN):""));
+  }
+
   // Service worker registration + version check.
   useEffect(()=>{
     if (!("serviceWorker" in navigator)) return;
@@ -1329,10 +1528,12 @@ function App(){
                     onQuickLog={quickLog} onToggleTask={toggleTask} />;
   else if (tab==="people") screen = <PeopleView data={data}
                     onOpenContact={(id)=> setOverlay({type:"contactDetail", id})}
-                    onOpenOrg={(id)=> setOverlay({type:"orgDetail", id})} />;
+                    onOpenOrg={(id)=> setOverlay({type:"orgDetail", id})}
+                    onImport={()=> setOverlay({type:"import"})} />;
   else if (tab==="deals") screen = <DealsView data={data} onOpenDeal={(id)=> setOverlay({type:"dealDetail", id})} />;
   else screen = <SettingsView cfg={cfg} onCfg={applyCfg} onLogout={signOutHard}
-                    onCheckUpdate={checkUpdate} updateVer={updateVer} />;
+                    onCheckUpdate={checkUpdate} updateVer={updateVer}
+                    onImport={()=> setOverlay({type:"import"})} />;
 
   return (
     <div className="app-shell">
@@ -1383,6 +1584,9 @@ function App(){
 
       {overlay && overlay.type==="ai" &&
         <AIPanel title={overlay.title} run={overlay.run} onClose={()=> setOverlay(null)} />}
+
+      {overlay && overlay.type==="import" &&
+        <ImportFlow existingContacts={data.contacts||[]} onApply={applyImport} onClose={()=> setOverlay(null)} />}
 
       {overlay && overlay.type==="dealForm" &&
         <DealForm deal={overlay.deal} contacts={data.contacts||[]} orgs={data.organizations||[]}
