@@ -20,7 +20,7 @@
    - everything else          -> default network
 */
 
-const VERSION     = "0.1.0";                 // keep in lockstep with APP_VERSION
+const VERSION     = "0.2.0";                 // keep in lockstep with APP_VERSION
 const SHELL_CACHE = "orbit-shell-" + VERSION;
 const ASSET_CACHE = "orbit-assets-" + VERSION;
 const DATA_CACHE  = "orbit-data-v1";         // user collections; un-versioned so it

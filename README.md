@@ -13,7 +13,8 @@ backend, Capacitor native wrap, service-worker offline.
 ## Layout
 ```
 orbit-crm/
-  index.html            # the app (single-file PWA) — built in a later pass
+  index.html            # the app (single-file PWA)
+  CLAUDE.md             # architecture / endpoints / env / conventions (read this first)
   sw.js                 # service worker (offline shell + data reads)
   manifest.json         # PWA manifest
   build.js              # native build: JSX -> www/app.js, vendor libs (store-safe)
@@ -39,34 +40,25 @@ Never hardcode brand text/colors. Route through `APP_NAME`/`BRAND` config + an
 }
 ```
 
-## Status
-- [x] Repo + infra: `sw.js`, `manifest.json`, `build.js`, `capacitor.config.json`
-- [x] Backend skeleton + schema (`backend/`)
-- [x] `index.html` shell — auth screen, nav, settings (theme + deals toggle),
-      collections + AI relay clients, sync loader, SW registration, in-app updater
-      (compiles + renders clean; placeholder CRM screens)
-- [x] **Phase 2:** Contacts + Organizations + Tags — list/search/filter, add/edit/delete,
-      contact↔company linking, contact & company detail views
-- [x] **Phase 3:** Interactions log (timeline + types) + follow-up tasks +
-      cadence engine + Home "who to reach out to" / follow-ups / upcoming birthdays
-- [x] Explore-offline mode (local-only, no backend) for trying it before Supabase is wired
-- [x] **Phase 5:** Deals layer (gated) — pipeline by stage, open/won totals,
-      deal form + detail with quick stage changes, contact/company linking
-- [x] **Phase 4:** AI — ✨ Summarize history + ✨ Draft check-in on each contact,
-      via the relay (task-routed to Haiku); guarded to no-op offline. Runs once the backend is live.
+## Status — LIVE on the web
+Inner Orbit is deployed and in use. (Deployed version is sourced from `APP_VERSION` in
+`index.html` + the `/api/health` endpoint — never hardcoded here.)
+- **App:** https://getinnerorbit.io — GitHub Pages (repo root), HTTPS
+- **API:** https://inner-orbit-production.up.railway.app — Railway (`backend/`); health at `/api/health`
+- **DB / Auth:** Supabase (ES256 / JWKS); schema in `backend/schema.sql`
 
-**V1 feature-complete.** Remaining to ship: stand up Supabase + deploy backend
-(unlocks AI + cross-device sync), then native build (Capacitor) + store listing.
+**Built (V1):** contacts · organizations · tags · interaction log · follow-up + cadence
+"who to reach out to" engine · upcoming birthdays · gated deals pipeline · AI (✨ Summarize /
+✨ Draft check-in) · vCard import with dedupe · offline mode.
 
-## Try it now (no backend needed)
-Run `python dev_server.py` in this folder, open http://localhost:8300 (or 8302),
-tap **“Explore offline (no account)”**, and add contacts / log interactions / set
-cadences. Data stays local on the device. The Explore button auto-hides once
-`SUPABASE_URL` is set.
-- [ ] Supabase project created + `schema.sql` applied
-- [ ] Native build (vendor libs, icons) + store listing
+**Next:** contact-import rounds (Gmail → iCloud) · Google Contacts sync · email-to-timeline ·
+Blinq-style digital business card · Apple contacts + Capacitor native build + store listings.
 
-## Quick start
-- **Backend:** see `backend/README.md`.
-- **Frontend (dev):** serve the repo root over http (e.g. `python -m http.server 8000`)
-  and open `http://localhost:8000` once `index.html` exists.
+See **`CLAUDE.md`** for architecture, endpoints, env vars, and conventions.
+
+## Run it
+- **Live app:** https://getinnerorbit.io
+- **Local frontend:** `python dev_server.py` → http://localhost:8300 (or any static host).
+  "Explore offline (no account)" appears only while `SUPABASE_URL` is unset.
+- **Local backend:** see `backend/README.md` (`uvicorn main:app` with `backend/.env`).
+- **Native build:** `node build.js` → precompiles JSX to `www/` for Capacitor.

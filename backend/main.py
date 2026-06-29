@@ -248,7 +248,8 @@ def check_rate_limit(action: str, user_id: str, limit: int, window_seconds: int)
 @app.get("/")
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "app": "orbit", "version": APP_VERSION, "env": APP_ENV}
+    return {"ok": True, "app": "orbit", "version": APP_VERSION, "env": APP_ENV,
+            "ai": "configured" if anthropic_client else "not_configured"}
 
 
 # --------------------------------------------------------------------------- #
