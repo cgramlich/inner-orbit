@@ -20,11 +20,13 @@ backend, deployed to the web; Capacitor native build is future.
 - **appId (native, not yet published):** `com.orbitcrm.app`.
 
 ## Versioning (do NOT hardcode a version in docs)
-- Source of truth = `APP_VERSION` in `index.html` and `VERSION` in `sw.js` (keep in
-  **lockstep**), plus the deployed `/api/health` `version` field.
-- **Bump `APP_VERSION` (+ `sw.js`) on every user-facing change** — it drives the in-app
-  update banner. When citing "what's deployed," read the constant / hit `/health`; never
-  write a number into prose.
+- Source of truth = `APP_VERSION` + `BUILD` in `index.html` and `VERSION` in `sw.js`
+  (keep all three in **lockstep**), plus the deployed `/api/health` `version` field.
+- **Bump `APP_VERSION` + `BUILD` (+ `sw.js`) on every user-facing change.** `BUILD` is the
+  monotonic "YYYY-MM-DD.N" stamp the in-app updater actually compares (portfolio-standard
+  updater, ref impl `tracker-app`); `APP_VERSION` is the friendly label shown in the banner,
+  Settings, and footers. When citing "what's deployed," read the constants / hit `/health`;
+  never write a number into prose.
 
 ## Backend (`backend/main.py`)
 - Auth: `verify_jwt` picks alg from the token header — asymmetric (ES256/RS256) via JWKS, or
