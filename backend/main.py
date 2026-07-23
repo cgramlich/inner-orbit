@@ -50,7 +50,7 @@ logger = logging.getLogger("orbit")
 # --------------------------------------------------------------------------- #
 # Config / env
 # --------------------------------------------------------------------------- #
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 APP_ENV = os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
@@ -175,7 +175,8 @@ def _now_iso() -> str:
 
 
 def db_exc(op: str, name: str, exc: Exception) -> HTTPException:
-    logger.error(f"[DB] {op} {name} failed: {type(exc).__name__}: {exc}")
+    # Type name + code only — exception payloads can echo user row data (PII).
+    logger.error(f"[DB] {op} {name} failed: {type(exc).__name__} code={getattr(exc, 'code', None)}")
     return HTTPException(status_code=500, detail=f"Database error ({op} {name})")
 
 
@@ -341,8 +342,10 @@ def _global_spend_this_period() -> float:
         )
         return float(sum((r.get("cost_usd") or 0) for r in rows.data))
     except Exception as exc:
-        logger.warning(f"[AI] spend lookup failed (fail-open): {exc}")
-        return 0.0
+        # FAIL CLOSED: if spend can't be read, report the full budget so the
+        # circuit breaker trips. Unmetered AI spend is worse than a brief 503.
+        logger.error(f"[AI] spend lookup failed (fail-closed): {type(exc).__name__}")
+        return AI_MONTHLY_BUDGET_USD
 
 
 def _usage_calls_this_period(user_id: str) -> int:
@@ -356,7 +359,9 @@ def _usage_calls_this_period(user_id: str) -> int:
         )
         return rows.count or 0
     except Exception as exc:
-        logger.warning(f"[AI] usage count failed (fail-open): {exc}")
+        # Per-user cap stays fail-open (a read blip shouldn't lock users out);
+        # the global breaker above fails closed and bounds the damage.
+        logger.warning(f"[AI] usage count failed (fail-open): {type(exc).__name__}")
         return 0
 
 
@@ -503,7 +508,7 @@ async def account_delete(
         try:
             supabase.table(name).delete().eq("user_id", user_id).execute()
         except Exception as exc:
-            errors.append(f"{name}: {exc}")
+            errors.append(f"{name}: {type(exc).__name__}")  # name only — no payload (PII)
     if errors:
         logger.error(f"[ACCOUNT] partial delete for {user_id}: {errors}")
         raise HTTPException(status_code=500, detail="Account deletion partially failed")
