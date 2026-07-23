@@ -91,6 +91,14 @@
     .input{ width:100%; background:var(--bg-2); border:1px solid var(--line); color:var(--text);
       border-radius:12px; padding:12px 14px; font-size:16px; }
     .input:focus{ outline:none; border-color:var(--accent); }
+    /* password field with the reveal eyeball (PORTABLE-IMPROVEMENTS 2026-07-10) */
+    .pw-wrap{ position:relative; }
+    .pw-wrap .input{ padding-right:46px; }
+    .pw-eye{ position:absolute; right:6px; top:50%; transform:translateY(-50%); width:36px; height:36px;
+      display:flex; align-items:center; justify-content:center; border-radius:50%;
+      background:none; border:none; padding:0; cursor:pointer; color:var(--text-dim); }
+    .pw-eye:active{ color:var(--text); }
+    .pw-eye svg{ width:19px; height:19px; }
 
     .empty{ text-align:center; color:var(--text-dim); padding:56px 20px; }
     .empty .glyph{ font-size:40px; opacity:.5; margin-bottom:10px; }
@@ -214,7 +222,7 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 /* ---- branding / config ---------------------------------------------- */
-const APP_VERSION = "0.2.1";
+const APP_VERSION = "0.2.2";
 const BRAND = { name: "Inner Orbit", tagline: "Stay close to the people in your orbit." };
 
 // Hosted backend base (Railway). Overridable per-user in Settings.
@@ -452,6 +460,33 @@ function TopBar({ tab }){
   return <div className="topbar"><h1>{t}</h1>{s && <div className="sub">{s}</div>}</div>;
 }
 
+/* ============================================================
+   PASSWORD INPUT with reveal eyeball - the shared-shell STANDARD
+   (PORTABLE-IMPROVEMENTS 2026-07-10). Used on EVERY password field.
+   ============================================================ */
+const EYE_PATHS = {
+  eye:    ["M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z","M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"],
+  eyeOff: ["M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94","M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19","M14.12 14.12a3 3 0 1 1-4.24-4.24","M1 1l22 22"],
+};
+function PwInput({ value, onChange, placeholder, autoComplete, onEnter }){
+  const [show, setShow] = useState(false);
+  return (
+    <div className="pw-wrap">
+      <input className="input" type={show ? "text" : "password"} value={value}
+        autoCapitalize="off" autoComplete={autoComplete||"current-password"}
+        onChange={e=>onChange(e.target.value)} placeholder={placeholder||""}
+        onKeyDown={e=>{ if(e.key==="Enter" && onEnter) onEnter(); }} />
+      <button type="button" className="pw-eye" onClick={()=>setShow(s=>!s)}
+        aria-label={show ? "Hide password" : "Show password"}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {(show ? EYE_PATHS.eyeOff : EYE_PATHS.eye).map((d,i)=> <path key={i} d={d}/>)}
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function AuthScreen({ onSignedIn, onExplore }){
   const [mode,setMode] = useState("signin");
   const [email,setEmail] = useState("");
@@ -501,8 +536,8 @@ function AuthScreen({ onSignedIn, onExplore }){
       </div>
       <div className="field">
         <label>Password</label>
-        <input className="input" type="password" autoComplete={mode==="signup"?"new-password":"current-password"}
-          value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" />
+        <PwInput value={pw} onChange={setPw} placeholder="••••••••"
+          autoComplete={mode==="signup"?"new-password":"current-password"} onEnter={submit} />
       </div>
       {err && <div className="err">{err}</div>}
       {info && <div className="notice">{info}</div>}
