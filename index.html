@@ -106,11 +106,12 @@
     .pill{ display:inline-block; background:var(--surface-2); border:1px solid var(--line);
       color:var(--text-dim); border-radius:999px; padding:3px 10px; font-size:12px; margin:2px 4px 2px 0; }
 
+    /* PWA update banner (top of app) - the whole bar is one tappable button */
     .syncbar{ position:fixed; top:env(safe-area-inset-top); left:0; right:0; z-index:40;
       display:flex; align-items:center; gap:10px; justify-content:center;
       background:var(--accent); color:#fff; font-size:13px; font-weight:600; padding:8px 14px;
-      max-width:560px; margin:0 auto; }
-    .syncbar button{ background:rgba(255,255,255,.2); border:0; color:#fff;
+      max-width:560px; margin:0 auto; border:0; cursor:pointer; }
+    .syncbar .go{ background:rgba(255,255,255,.2); border:0; color:#fff;
       border-radius:8px; padding:5px 12px; font-weight:600; }
     .toast{ position:fixed; bottom:96px; left:50%; transform:translateX(-50%); z-index:50;
       background:var(--surface-2); color:var(--text); border:1px solid var(--line);
@@ -222,7 +223,14 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 /* ---- branding / config ---------------------------------------------- */
-const APP_VERSION = "0.2.2";
+// User-facing semantic version (MAJOR.MINOR.PATCH). This is what shows in Settings,
+// the update prompts, and the footers - a real version, not a build date. Bump it on
+// every deploy: PATCH for a fix, MINOR for a feature, MAJOR for a big milestone.
+const APP_VERSION = "0.2.3";
+// Internal build stamp. Bump on every deploy too (today's date + a counter). This is
+// what the updater actually COMPARES (it's monotonic, so detection never misfires) and
+// what cache-busts the reload; APP_VERSION above is the friendly label shown to users.
+const BUILD = "2026-07-23.1";
 const BRAND = { name: "Inner Orbit", tagline: "Stay close to the people in your orbit." };
 
 // Hosted backend base (Railway). Overridable per-user in Settings.
@@ -419,23 +427,26 @@ async function aiRelay(cfg, { task, messages, system, max_tokens }){
 }
 
 /* ---- version check / in-app updater --------------------------------- */
-async function fetchDeployedVersion(){
-  try {
-    const url = location.pathname + "?vcheck=" + Date.now();
-    const res = await fetch(url, { cache:"no-store" });
-    const html = await res.text();
-    const m = html.match(/APP_VERSION\s*=\s*"([^"]+)"/);
-    return m ? m[1] : null;
-  } catch(e){ return null; }
-}
-function isNewer(a,b){
-  const pa=(a||"0").split(".").map(Number), pb=(b||"0").split(".").map(Number);
-  for (let i=0;i<3;i++){ if((pa[i]||0)>(pb[i]||0))return true; if((pa[i]||0)<(pb[i]||0))return false; }
+// Compare two build stamps of the form "YYYY-MM-DD.N". A plain string compare is wrong
+// (the counter isn't zero-padded, so ".11" < ".9" lexically); split on - and . into
+// numeric fields and compare left to right. True iff `a` is strictly newer than `b`.
+// Used by the updater so we only offer a genuinely newer deployed build.
+function buildIsNewer(a, b){
+  const parse = s => String(s||"").split(/[-.]/).map(n=>parseInt(n,10)||0);
+  const pa=parse(a), pb=parse(b), len=Math.max(pa.length,pb.length);
+  for(let i=0;i<len;i++){ const x=pa[i]||0, y=pb[i]||0; if(x>y) return true; if(x<y) return false; }
   return false;
 }
-function applyUpdate(version){
-  const base = location.origin + location.pathname;
-  location.replace(base + "?v=" + encodeURIComponent(version||Date.now()));
+// Apply by navigating to a build-stamped URL so iOS can't serve the cached HTML.
+// Wipe the SW caches first so the new build can never be masked by a cached shell.
+function applyUpdateNav(stamp){
+  logMsg("UPDATE","applying -> "+stamp);
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller){
+      navigator.serviceWorker.controller.postMessage({ type:"clearCache" });
+    }
+  } catch(_){}
+  window.location.replace(location.pathname + "?u=" + encodeURIComponent(stamp||Date.now()));
 }
 
 /* ============================================================
@@ -555,6 +566,7 @@ function AuthScreen({ onSignedIn, onExplore }){
           <div className="muted" style={{marginTop:6}}>Local-only on this device — for trying it out before the backend is wired.</div>
         </div>
       )}
+      <p className="muted" style={{textAlign:"center", marginTop:16, opacity:.6}}>v{APP_VERSION}</p>
     </div>
   );
 }
@@ -832,7 +844,7 @@ function DealDetail({ deal, contact, org, onEdit, onDelete, onClose, onStage, on
   );
 }
 
-function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updateVer, onImport }){
+function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updMsg, update, onApplyUpdate, onImport }){
   const theme = cfg.theme || "dark";
   function setTheme(t){
     const next = {...cfg, theme:t}; onCfg(next);
@@ -875,12 +887,14 @@ function SettingsView({ cfg, onCfg, onLogout, onCheckUpdate, updateVer, onImport
       </div>
 
       <div className="card">
-        <div className="row" style={{justifyContent:"space-between"}}>
-          <div><div style={{fontWeight:600}}>Version {APP_VERSION}</div>
-            <div className="muted">{updateVer ? "Update "+updateVer+" available" : "Up to date"}</div></div>
-          <button className="btn" style={{width:"auto"}} onClick={onCheckUpdate}>Check</button>
+        <div className="row" style={{gap:12, minHeight:34}}>
+          {update
+            ? <button className="btn primary" style={{width:"auto"}} onClick={()=>onApplyUpdate && onApplyUpdate()}>Update to v{update.ver||update.build}</button>
+            : <button className="btn ghost" style={{padding:"8px 0"}} onClick={()=>onCheckUpdate && onCheckUpdate(true)}>Check for updates</button>}
+          {updMsg && <span className="muted">{updMsg}</span>}
         </div>
       </div>
+      <p className="muted" style={{textAlign:"center", marginTop:6, marginBottom:14}}>{BRAND.name} v{APP_VERSION}</p>
 
       <button className="btn danger" onClick={onLogout} style={{marginTop:4}}>Sign out</button>
     </div>
@@ -1369,7 +1383,10 @@ function App(){
   const [tab,setTab] = useState("home");
   const [data,setData] = useState(()=> loadCache() || emptyData());
   const [toast,setToast] = useState("");
-  const [updateVer,setUpdateVer] = useState(null);
+  // PWA self-update: { ver, build } of a newer deployed build, else null.
+  const [update,setUpdate] = useState(null);
+  const [updMsg,setUpdMsg] = useState("");   // inline status for the Settings "Check for updates" row
+  const updTimer = useRef(null);
   const loadedOnce = useRef(false);
 
   const [overlay,setOverlay] = useState(null);
@@ -1533,12 +1550,40 @@ function App(){
     return ()=> window.removeEventListener("load", onLoad);
   },[]);
 
-  const checkUpdate = useCallback(async ()=>{
-    const v = await fetchDeployedVersion();
-    if (v && isNewer(v, APP_VERSION)) setUpdateVer(v);
-    else flash("You're up to date");
-  },[]);
-  useEffect(()=>{ const t=setTimeout(checkUpdate, 2000); return ()=> clearTimeout(t); },[checkUpdate]);
+  // --- PWA self-update: detect a newer deployed build and offer a one-tap refresh ---
+  // Installed PWAs cache the HTML hard; this fetches the deployed file fresh, reads its
+  // BUILD stamp, and surfaces a banner when a genuinely newer build is live.
+  // Show a status line for a few seconds then clear it (used for terminal results).
+  const flashUpd = useCallback((msg)=>{ setUpdMsg(msg); if(updTimer.current) clearTimeout(updTimer.current); updTimer.current = setTimeout(()=>setUpdMsg(""), 4000); },[]);
+  // manual=true is the Settings button: show inline "Checking..." then a result. On
+  // launch/resume we check quietly and only surface the banner if there's an update.
+  // Detection compares the deployed BUILD (monotonic date stamp) so it never misfires;
+  // the deployed APP_VERSION is read alongside it purely to LABEL the update ("v0.2.3").
+  const checkUpdate = useCallback(async (manual=false)=>{
+    if(manual){ if(updTimer.current) clearTimeout(updTimer.current); setUpdMsg("Checking..."); }
+    try{
+      const res = await fetch(location.pathname + "?_=" + Date.now(), { cache:"no-store" });
+      if(!res.ok){ logMsg("UPDATE","check http "+res.status); if(manual) flashUpd("Couldn't check - are you online?"); return; }
+      const html = await res.text();
+      const mb = html.match(/const BUILD = "([^"]+)";/);       const rBuild = mb && mb[1];
+      const mv = html.match(/const APP_VERSION = "([^"]+)";/); const rVer = mv && mv[1];
+      if(rBuild && buildIsNewer(rBuild, BUILD)){ logMsg("UPDATE","newer build live: "+rBuild+" (v"+(rVer||"?")+")"); setUpdate({ ver:rVer, build:rBuild }); if(manual) setUpdMsg(""); }
+      else { logMsg("UPDATE","up to date (v"+APP_VERSION+", "+BUILD+")"); setUpdate(null); if(manual) flashUpd("You're on the latest (v"+APP_VERSION+")"); }
+    }catch(e){ logMsg("UPDATE","check failed: "+e.message); if(manual) flashUpd("Update check failed"); }
+  },[flashUpd]);
+  // Check on launch AND on resume AND on a periodic timer - installed PWAs are usually
+  // RESUMED from the background, not cold-launched, so a launch-only check means the
+  // banner rarely surfaces on its own. Debounced so a burst of resumes only refetches once.
+  useEffect(()=>{
+    let last=0; const GAP=60*1000;
+    const maybe=()=>{ const now=Date.now(); if(now-last<GAP) return; last=now; checkUpdate(false); };
+    const t=setTimeout(maybe, 1200);                       // initial launch check
+    const onVis=()=>{ if(document.visibilityState==="visible") maybe(); };
+    document.addEventListener("visibilitychange", onVis);
+    const iv=setInterval(maybe, 20*60*1000);               // periodic while open
+    return ()=>{ clearTimeout(t); clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+  },[checkUpdate]);
+  const doApplyUpdate = useCallback(()=> applyUpdateNav((update&&update.build)||String(Date.now())),[update]);
 
   // Initial data load from the backend once signed in.
   useEffect(()=>{
@@ -1573,14 +1618,16 @@ function App(){
                     onImport={()=> setOverlay({type:"import"})} />;
   else if (tab==="deals") screen = <DealsView data={data} onOpenDeal={(id)=> setOverlay({type:"dealDetail", id})} />;
   else screen = <SettingsView cfg={cfg} onCfg={applyCfg} onLogout={signOutHard}
-                    onCheckUpdate={checkUpdate} updateVer={updateVer}
+                    onCheckUpdate={checkUpdate} updMsg={updMsg} update={update} onApplyUpdate={doApplyUpdate}
                     onImport={()=> setOverlay({type:"import"})} />;
 
   return (
     <div className="app-shell">
-      {updateVer && (
-        <div className="syncbar"><span>Update available</span>
-          <button onClick={()=> applyUpdate(updateVer)}>Reload</button></div>
+      {update && (
+        <button className="syncbar" onClick={doApplyUpdate}>
+          <span>Update available <b>(v{update.ver||update.build})</b></span>
+          <span className="go">Refresh</span>
+        </button>
       )}
       <TopBar tab={tab} />
       <div className="content">{screen}</div>

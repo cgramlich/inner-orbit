@@ -13,14 +13,14 @@
 
    Scope by request type:
    - app document            -> network-first, fall back to cached shell
-   - version check (?vcheck=) -> NOT intercepted (always real network)
+   - version check (?_=)      -> NOT intercepted (always real network)
    - GET /api/collection/*    -> network-first, fall back to last cached copy
                                  (PUT writes are never intercepted)
    - immutable assets (cdnjs libs, fonts, our images) -> cache-first
    - everything else          -> default network
 */
 
-const VERSION     = "0.2.2";                 // keep in lockstep with APP_VERSION
+const VERSION     = "0.2.3";                 // keep in lockstep with APP_VERSION
 const SHELL_CACHE = "orbit-shell-" + VERSION;
 const ASSET_CACHE = "orbit-assets-" + VERSION;
 const DATA_CACHE  = "orbit-data-v1";         // user collections; un-versioned so it
@@ -141,7 +141,7 @@ self.addEventListener("fetch", (event) => {
   const isAppDoc = url.origin === self.location.origin &&
                    (url.pathname === "/" || url.pathname === "/index.html");
 
-  // App document: network-first. The version check (?vcheck=) is a query'd,
+  // App document: network-first. The version check (?_=) is a query'd,
   // non-navigation fetch, so it is excluded and hits the real network.
   if (isAppDoc && (req.mode === "navigate" || !url.search)) {
     event.respondWith(shellNetworkFirst(req));
