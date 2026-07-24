@@ -195,6 +195,18 @@
     .duecard.alert{ background:rgba(229,100,90,.12); border-color:var(--danger); color:var(--danger); }
     .duecard.ok{ background:var(--surface-2); color:var(--text-dim); }
 
+    /* ---- swipe-to-delete on list rows (portfolio standard, ref impl tracker-app) ---- */
+    .swipe-wrap{ position:relative; overflow:hidden; border-radius:12px; }
+    .swipe-del{ position:absolute; top:0; right:0; bottom:0; width:88px; border:none; background:#b23b29; color:#fff;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:12px; font-weight:700; }
+    .swipe-del svg{ width:18px; height:18px; stroke:#fff; stroke-width:2; fill:none; }
+    .swipe-body{ position:relative; background:var(--surface); touch-action:pan-y; will-change:transform; }
+    .swipe-wrap.on-bg .swipe-body{ background:var(--bg); }
+    /* a wrapped row is always :last-child of its swipe-body, which would strip every
+       divider via the :last-child rules above — re-apply, and drop only on the list's last wrapper */
+    .swipe-body .task-row, .swipe-body .timeline-item{ border-bottom:1px solid var(--line-soft); }
+    .swipe-wrap:last-child .task-row, .swipe-wrap:last-child .timeline-item{ border-bottom:0; }
+
     /* ---- AI panel (Phase 4) ---- */
     .ai-out{ white-space:pre-wrap; line-height:1.5; }
     .ai-loading{ display:flex; align-items:center; gap:10px; color:var(--text-dim); padding:8px 0; }
@@ -226,11 +238,11 @@ const { useState, useEffect, useRef, useCallback } = React;
 // User-facing semantic version (MAJOR.MINOR.PATCH). This is what shows in Settings,
 // the update prompts, and the footers - a real version, not a build date. Bump it on
 // every deploy: PATCH for a fix, MINOR for a feature, MAJOR for a big milestone.
-const APP_VERSION = "0.2.3";
+const APP_VERSION = "0.2.4";
 // Internal build stamp. Bump on every deploy too (today's date + a counter). This is
 // what the updater actually COMPARES (it's monotonic, so detection never misfires) and
 // what cache-busts the reload; APP_VERSION above is the friendly label shown to users.
-const BUILD = "2026-07-23.1";
+const BUILD = "2026-07-23.2";
 const BRAND = { name: "Inner Orbit", tagline: "Stay close to the people in your orbit." };
 
 // Hosted backend base (Railway). Overridable per-user in Settings.
@@ -581,7 +593,34 @@ function Placeholder({ glyph, title, note }){
   );
 }
 
-function HomeView({ data, onOpenContact, onQuickLog, onToggleTask }){
+/* Swipe a row left to reveal a Delete action (portfolio standard, ref impl tracker-app).
+   Horizontal-only, so vertical scroll is unaffected; a swipe suppresses the row's open-on-tap.
+   `bare` = row sits on the page background rather than inside a card. */
+const IC_TRASH = <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>;
+function SwipeRow({ onDelete, bare, children }){
+  const [dx,setDx] = useState(0);
+  const st = useRef(null); const moved = useRef(false);
+  function down(e){ st.current = { x:e.clientX, y:e.clientY, base:dx }; moved.current = false; try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){} }
+  function move(e){
+    if(!st.current) return;
+    const ddx = e.clientX - st.current.x, ddy = e.clientY - st.current.y;
+    if(Math.abs(ddx) > 8 && Math.abs(ddx) > Math.abs(ddy)) moved.current = true;
+    if(moved.current){ setDx(Math.max(-96, Math.min(0, st.current.base + ddx))); }
+  }
+  function end(){ if(!st.current) return; st.current = null; setDx(d => { const nd = d <= -48 ? -84 : 0; if(nd===0) moved.current = false; return nd; }); }
+  function clickCapture(e){ if(moved.current || dx !== 0){ e.stopPropagation(); e.preventDefault(); moved.current = false; setDx(0); } }
+  return (
+    <div className={"swipe-wrap"+(bare?" on-bg":"")}>
+      <button className="swipe-del" onClick={(e)=>{ e.stopPropagation(); setDx(0); onDelete(); }}>{IC_TRASH}<span>Delete</span></button>
+      <div className="swipe-body" style={{ transform:"translateX("+dx+"px)", transition: st.current ? "none" : "transform .18s" }}
+        onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onClickCapture={clickCapture}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function HomeView({ data, onOpenContact, onQuickLog, onToggleTask, onDeleteContact, onDeleteTask }){
   const contacts = data.contacts || [];
   const tasks = data.tasks || [];
   const cName = (id)=> (contacts.find(c=>c.id===id)||{}).name || "";
@@ -607,12 +646,14 @@ function HomeView({ data, onOpenContact, onQuickLog, onToggleTask }){
         <div className="card">
           <div className="sec-title">Time to reach out</div>
           {due.map(({c,info})=> (
-            <div key={c.id} className="list-row" onClick={()=> onOpenContact(c.id)}>
-              <div className="avatar">{initials(c.name)}</div>
-              <div className="lr-main"><div className="lr-name">{c.name}</div>
-                <div className={"muted "+(info.state==="over"?"due-over":"due-today")}>{info.label}</div></div>
-              <button className="btn" style={{width:"auto"}} onClick={e=>{ e.stopPropagation(); onQuickLog(c.id); }}>Logged</button>
-            </div>
+            <SwipeRow key={c.id} onDelete={()=>{ if(confirm("Delete this contact?")) onDeleteContact(c.id); }}>
+              <div className="list-row" onClick={()=> onOpenContact(c.id)}>
+                <div className="avatar">{initials(c.name)}</div>
+                <div className="lr-main"><div className="lr-name">{c.name}</div>
+                  <div className={"muted "+(info.state==="over"?"due-over":"due-today")}>{info.label}</div></div>
+                <button className="btn" style={{width:"auto"}} onClick={e=>{ e.stopPropagation(); onQuickLog(c.id); }}>Logged</button>
+              </div>
+            </SwipeRow>
           ))}
         </div>
       )}
@@ -620,13 +661,15 @@ function HomeView({ data, onOpenContact, onQuickLog, onToggleTask }){
         <div className="card">
           <div className="sec-title">Follow-ups</div>
           {openTasks.map(t=> (
-            <div key={t.id} className="task-row">
-              <input type="checkbox" checked={false} onChange={()=> onToggleTask(t.id)} />
-              <div className="lr-main" onClick={()=> t.contact_id && onOpenContact(t.contact_id)}>
-                <div>{t.title}</div>
-                <div className="muted">{[cName(t.contact_id), t.due_date && ("due "+fmtDate(t.due_date))].filter(Boolean).join(" · ")}</div>
+            <SwipeRow key={t.id} onDelete={()=>{ if(confirm("Delete this follow-up?")) onDeleteTask(t.id); }}>
+              <div className="task-row">
+                <input type="checkbox" checked={false} onChange={()=> onToggleTask(t.id)} />
+                <div className="lr-main" onClick={()=> t.contact_id && onOpenContact(t.contact_id)}>
+                  <div>{t.title}</div>
+                  <div className="muted">{[cName(t.contact_id), t.due_date && ("due "+fmtDate(t.due_date))].filter(Boolean).join(" · ")}</div>
+                </div>
               </div>
-            </div>
+            </SwipeRow>
           ))}
         </div>
       )}
@@ -634,11 +677,13 @@ function HomeView({ data, onOpenContact, onQuickLog, onToggleTask }){
         <div className="card">
           <div className="sec-title">Upcoming birthdays</div>
           {bdays.map(({c,d})=> (
-            <div key={c.id} className="list-row" onClick={()=> onOpenContact(c.id)}>
-              <div className="avatar">{initials(c.name)}</div>
-              <div className="lr-main"><div className="lr-name">{c.name}</div>
-                <div className="muted">{d===0?"Today! 🎉":d===1?"Tomorrow":"in "+d+" days"}</div></div>
-            </div>
+            <SwipeRow key={c.id} onDelete={()=>{ if(confirm("Delete this contact?")) onDeleteContact(c.id); }}>
+              <div className="list-row" onClick={()=> onOpenContact(c.id)}>
+                <div className="avatar">{initials(c.name)}</div>
+                <div className="lr-main"><div className="lr-name">{c.name}</div>
+                  <div className="muted">{d===0?"Today! 🎉":d===1?"Tomorrow":"in "+d+" days"}</div></div>
+              </div>
+            </SwipeRow>
           ))}
         </div>
       )}
@@ -646,7 +691,7 @@ function HomeView({ data, onOpenContact, onQuickLog, onToggleTask }){
   );
 }
 
-function PeopleView({ data, onOpenContact, onOpenOrg, onImport }){
+function PeopleView({ data, onOpenContact, onOpenOrg, onImport, onDeleteContact, onDeleteOrg }){
   const [seg,setSeg] = useState("people");
   const [q,setQ] = useState("");
   const [tag,setTag] = useState("");
@@ -699,12 +744,14 @@ function PeopleView({ data, onOpenContact, onOpenOrg, onImport }){
               const org = orgs.find(o=> o.id===c.org_id);
               const sub = [c.title, org && org.name].filter(Boolean).join(" · ") || (c.emails&&c.emails[0]) || "";
               return (
-                <div key={c.id} className="list-row" onClick={()=> onOpenContact(c.id)}>
-                  <div className="avatar">{initials(c.name)}</div>
-                  <div className="lr-main"><div className="lr-name">{c.name||"(unnamed)"}</div>
-                    <div className="muted">{sub}</div></div>
-                  {c.tags && c.tags[0] && <span className="pill">{c.tags[0]}{c.tags.length>1?" +"+(c.tags.length-1):""}</span>}
-                </div>
+                <SwipeRow key={c.id} bare onDelete={()=>{ if(confirm("Delete this contact?")) onDeleteContact(c.id); }}>
+                  <div className="list-row" onClick={()=> onOpenContact(c.id)}>
+                    <div className="avatar">{initials(c.name)}</div>
+                    <div className="lr-main"><div className="lr-name">{c.name||"(unnamed)"}</div>
+                      <div className="muted">{sub}</div></div>
+                    {c.tags && c.tags[0] && <span className="pill">{c.tags[0]}{c.tags.length>1?" +"+(c.tags.length-1):""}</span>}
+                  </div>
+                </SwipeRow>
               );
             })
       ) : (
@@ -715,11 +762,13 @@ function PeopleView({ data, onOpenContact, onOpenOrg, onImport }){
               const count = contacts.filter(c=> c.org_id===o.id).length;
               const sub = [o.type, count+" contact"+(count===1?"":"s")].filter(Boolean).join(" · ");
               return (
-                <div key={o.id} className="list-row" onClick={()=> onOpenOrg(o.id)}>
-                  <div className="avatar sq">{initials(o.name)}</div>
-                  <div className="lr-main"><div className="lr-name">{o.name}</div>
-                    <div className="muted">{sub}</div></div>
-                </div>
+                <SwipeRow key={o.id} bare onDelete={()=>{ if(confirm("Delete this company? Its contacts are kept.")) onDeleteOrg(o.id); }}>
+                  <div className="list-row" onClick={()=> onOpenOrg(o.id)}>
+                    <div className="avatar sq">{initials(o.name)}</div>
+                    <div className="lr-main"><div className="lr-name">{o.name}</div>
+                      <div className="muted">{sub}</div></div>
+                  </div>
+                </SwipeRow>
               );
             })
       )}
@@ -727,7 +776,7 @@ function PeopleView({ data, onOpenContact, onOpenOrg, onImport }){
   );
 }
 
-function DealsView({ data, onOpenDeal }){
+function DealsView({ data, onOpenDeal, onDeleteDeal }){
   const deals = data.deals || [];
   const contacts = data.contacts || [];
   const orgs = data.organizations || [];
@@ -758,11 +807,13 @@ function DealsView({ data, onOpenDeal }){
           <div key={sv} className="card">
             <div className="sec-title">{sl} ({inStage.length})</div>
             {inStage.map(d=> (
-              <div key={d.id} className="list-row" onClick={()=> onOpenDeal(d.id)}>
-                <div className="lr-main"><div className="lr-name">{d.title}</div>
-                  <div className="muted">{nameFor(d)}</div></div>
-                {d.value ? <div style={{fontWeight:600}}>{fmtMoney(d.value)}</div> : null}
-              </div>
+              <SwipeRow key={d.id} onDelete={()=>{ if(confirm("Delete this deal?")) onDeleteDeal(d.id); }}>
+                <div className="list-row" onClick={()=> onOpenDeal(d.id)}>
+                  <div className="lr-main"><div className="lr-name">{d.title}</div>
+                    <div className="muted">{nameFor(d)}</div></div>
+                  {d.value ? <div style={{fontWeight:600}}>{fmtMoney(d.value)}</div> : null}
+                </div>
+              </SwipeRow>
             ))}
           </div>
         );
@@ -1046,31 +1097,32 @@ function ContactDetail({ contact, org, interactions, tasks, onEdit, onDelete, on
           {ix.length===0
             ? <div className="muted">No interactions logged yet.</div>
             : ix.map(i=> (
-                <div key={i.id} className="timeline-item">
-                  <div className="ti-dot" />
-                  <div className="ti-main">
-                    <div className="row" style={{justifyContent:"space-between"}}>
-                      <b>{ITypeLabel(i.type)}</b><span className="muted">{fmtDate(i.date)}</span>
+                <SwipeRow key={i.id} onDelete={()=>{ if(confirm("Delete this entry?")) onDeleteInteraction(i.id); }}>
+                  <div className="timeline-item">
+                    <div className="ti-dot" />
+                    <div className="ti-main">
+                      <div className="row" style={{justifyContent:"space-between"}}>
+                        <b>{ITypeLabel(i.type)}</b><span className="muted">{fmtDate(i.date)}</span>
+                      </div>
+                      {i.note && <div>{i.note}</div>}
                     </div>
-                    {i.note && <div>{i.note}</div>}
-                    <button className="btn ghost danger" style={{padding:"2px 0", fontSize:12, width:"auto"}}
-                      onClick={()=>{ if(confirm("Delete this entry?")) onDeleteInteraction(i.id); }}>Delete</button>
                   </div>
-                </div>
+                </SwipeRow>
               ))}
         </div>
 
         <div className="card">
           <div style={{fontWeight:600, marginBottom:8}}>Follow-ups</div>
           {tk.map(t=> (
-            <div key={t.id} className="task-row">
-              <input type="checkbox" checked={!!t.done} onChange={()=> onToggleTask(t.id)} />
-              <div className="lr-main" style={{textDecoration:t.done?"line-through":"none", opacity:t.done?0.55:1}}>
-                <div>{t.title}</div>
-                {t.due_date && <div className="muted">Due {fmtDate(t.due_date)}</div>}
+            <SwipeRow key={t.id} onDelete={()=>{ if(confirm("Delete this follow-up?")) onDeleteTask(t.id); }}>
+              <div className="task-row">
+                <input type="checkbox" checked={!!t.done} onChange={()=> onToggleTask(t.id)} />
+                <div className="lr-main" style={{textDecoration:t.done?"line-through":"none", opacity:t.done?0.55:1}}>
+                  <div>{t.title}</div>
+                  {t.due_date && <div className="muted">Due {fmtDate(t.due_date)}</div>}
+                </div>
               </div>
-              <button className="icon-btn" onClick={()=> onDeleteTask(t.id)}>✕</button>
-            </div>
+            </SwipeRow>
           ))}
           <input className="input" style={{marginTop:8}} value={taskTitle}
             onChange={e=>setTaskTitle(e.target.value)} placeholder="Add a follow-up…" />
@@ -1149,7 +1201,7 @@ function OrgForm({ org, onSave, onClose }){
   );
 }
 
-function OrgDetail({ org, contacts, onEdit, onDelete, onClose, onOpenContact }){
+function OrgDetail({ org, contacts, onEdit, onDelete, onClose, onOpenContact, onDeleteContact }){
   const o = org;
   return (
     <div className="overlay">
@@ -1172,11 +1224,13 @@ function OrgDetail({ org, contacts, onEdit, onDelete, onClose, onOpenContact }){
           {contacts.length===0
             ? <div className="muted">No contacts linked yet.</div>
             : contacts.map(c=> (
-                <div key={c.id} className="list-row" onClick={()=> onOpenContact(c.id)}>
-                  <div className="avatar">{initials(c.name)}</div>
-                  <div className="lr-main"><div className="lr-name">{c.name}</div>
-                    <div className="muted">{c.title||""}</div></div>
-                </div>
+                <SwipeRow key={c.id} onDelete={()=>{ if(confirm("Delete this contact?")) onDeleteContact(c.id); }}>
+                  <div className="list-row" onClick={()=> onOpenContact(c.id)}>
+                    <div className="avatar">{initials(c.name)}</div>
+                    <div className="lr-main"><div className="lr-name">{c.name}</div>
+                      <div className="muted">{c.title||""}</div></div>
+                  </div>
+                </SwipeRow>
               ))}
         </div>
         <button className="btn danger" style={{marginTop:8}}
@@ -1611,12 +1665,15 @@ function App(){
   let screen;
   if (tab==="home") screen = <HomeView data={data}
                     onOpenContact={(id)=> setOverlay({type:"contactDetail", id})}
-                    onQuickLog={quickLog} onToggleTask={toggleTask} />;
+                    onQuickLog={quickLog} onToggleTask={toggleTask}
+                    onDeleteContact={deleteContact} onDeleteTask={deleteTask} />;
   else if (tab==="people") screen = <PeopleView data={data}
                     onOpenContact={(id)=> setOverlay({type:"contactDetail", id})}
                     onOpenOrg={(id)=> setOverlay({type:"orgDetail", id})}
-                    onImport={()=> setOverlay({type:"import"})} />;
-  else if (tab==="deals") screen = <DealsView data={data} onOpenDeal={(id)=> setOverlay({type:"dealDetail", id})} />;
+                    onImport={()=> setOverlay({type:"import"})}
+                    onDeleteContact={deleteContact} onDeleteOrg={deleteOrg} />;
+  else if (tab==="deals") screen = <DealsView data={data} onOpenDeal={(id)=> setOverlay({type:"dealDetail", id})}
+                    onDeleteDeal={deleteDeal} />;
   else screen = <SettingsView cfg={cfg} onCfg={applyCfg} onLogout={signOutHard}
                     onCheckUpdate={checkUpdate} updMsg={updMsg} update={update} onApplyUpdate={doApplyUpdate}
                     onImport={()=> setOverlay({type:"import"})} />;
@@ -1706,6 +1763,7 @@ function App(){
           onEdit={()=> setOverlay({type:"orgForm", org:o})}
           onDelete={()=>{ deleteOrg(o.id); setOverlay(null); }}
           onOpenContact={(id)=> setOverlay({type:"contactDetail", id})}
+          onDeleteContact={deleteContact}
           onClose={()=> setOverlay(null)} />;
       })()}
       <nav className="nav">
